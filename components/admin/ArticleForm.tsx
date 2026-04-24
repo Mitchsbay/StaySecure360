@@ -26,6 +26,11 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
 
   // AI featured image state for manual articles
   const [imagePrompt, setImagePrompt] = useState('')
+
+  // AI SEO metadata state for manual articles
+  const [generatingSeo, setGeneratingSeo] = useState(false)
+  const [seoGenError, setSeoGenError] = useState<string | null>(null)
+  const [seoGenSuccess, setSeoGenSuccess] = useState(false)
   const [generatingImage, setGeneratingImage] = useState(false)
   const [imageGenError, setImageGenError] = useState<string | null>(null)
   const [imageGenSuccess, setImageGenSuccess] = useState(false)
@@ -122,6 +127,52 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
       setGenError(err instanceof Error ? err.message : 'Generation failed')
     } finally {
       setGenerating(false)
+    }
+  }
+
+
+  // ── Generate SEO metadata from the current article fields ────
+  const handleGenerateSeoMeta = async () => {
+    if (!form.title.trim() && !form.excerpt.trim() && !form.content.trim()) {
+      setSeoGenError('Add a title, excerpt, or article body before generating SEO metadata.')
+      return
+    }
+
+    const topicName = topics.find((t) => t.id === form.topic_id)?.name ?? ''
+
+    setGeneratingSeo(true)
+    setSeoGenError(null)
+    setSeoGenSuccess(false)
+
+    try {
+      const res = await fetch('/api/generate-seo-meta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: form.title,
+          excerpt: form.excerpt,
+          content: form.content,
+          topic: topicName,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error ?? 'SEO metadata generation failed')
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        meta_title: data.meta_title ?? prev.meta_title,
+        meta_description: data.meta_description ?? prev.meta_description,
+      }))
+      setSeoGenSuccess(true)
+      setTimeout(() => setSeoGenSuccess(false), 4000)
+    } catch (err: unknown) {
+      setSeoGenError(err instanceof Error ? err.message : 'SEO metadata generation failed')
+    } finally {
+      setGeneratingSeo(false)
     }
   }
 
@@ -526,7 +577,42 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
 
           {/* SEO */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 mb-4 text-sm">SEO</h3>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h3 className="font-semibold text-gray-900 text-sm">SEO</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Generate a search-friendly meta title and description from the current article content.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleGenerateSeoMeta}
+                disabled={generatingSeo}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-60 shrink-0"
+              >
+                {generatingSeo ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Generating…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Generate SEO Meta
+                  </>
+                )}
+              </button>
+            </div>
+
+            {seoGenSuccess && (
+              <p className="text-xs text-green-600 font-medium mb-3">SEO metadata generated and added to this article.</p>
+            )}
+            {seoGenError && (
+              <p className="flex items-center gap-1 text-xs text-red-600 mb-3">
+                <AlertTriangle className="w-3.5 h-3.5" /> {seoGenError}
+              </p>
+            )}
+
             <div className="space-y-3">
               <div>
                 <label htmlFor="field-meta-title" className="block text-xs font-medium text-gray-600 mb-1">Meta Title</label>
@@ -535,10 +621,17 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
                   name="meta_title"
                   value={form.meta_title}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-gray-900 text-sm"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-gray-900 text-sm ${
+                    form.meta_title.length > 60 ? 'border-amber-400 bg-amber-50' : 'border-gray-300'
+                  }`}
                   placeholder="SEO title (defaults to article title)"
                 />
-                <p className="text-xs text-gray-400 mt-0.5">{form.meta_title.length}/60</p>
+                <div className="flex items-center justify-between gap-2 mt-0.5">
+                  <p className="text-xs text-gray-400">Recommended: 50–60 characters</p>
+                  <p className={`text-xs ${form.meta_title.length > 60 ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+                    {form.meta_title.length}/60
+                  </p>
+                </div>
               </div>
               <div>
                 <label htmlFor="field-meta-desc" className="block text-xs font-medium text-gray-600 mb-1">
@@ -550,10 +643,17 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
                   value={form.meta_description}
                   onChange={handleChange}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-gray-900 text-sm resize-none"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-gray-900 text-sm resize-none ${
+                    form.meta_description.length > 160 ? 'border-amber-400 bg-amber-50' : 'border-gray-300'
+                  }`}
                   placeholder="SEO description (defaults to excerpt)"
                 />
-                <p className="text-xs text-gray-400 mt-0.5">{form.meta_description.length}/160</p>
+                <div className="flex items-center justify-between gap-2 mt-0.5">
+                  <p className="text-xs text-gray-400">Recommended: 140–155 characters</p>
+                  <p className={`text-xs ${form.meta_description.length > 160 ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+                    {form.meta_description.length}/160
+                  </p>
+                </div>
               </div>
             </div>
           </div>
