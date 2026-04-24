@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Save, Eye, EyeOff, Trash2, ExternalLink, Sparkles, RefreshCw, AlertTriangle } from 'lucide-react'
+import { Save, Eye, EyeOff, Trash2, ExternalLink, Sparkles, RefreshCw, AlertTriangle, Image as ImageIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { generateSlug, extractYouTubeId } from '@/lib/utils'
 import type { Article, Topic } from '@/types'
@@ -23,6 +23,12 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
   const [generating, setGenerating] = useState(false)
   const [genError, setGenError] = useState<string | null>(null)
   const [genSuccess, setGenSuccess] = useState(false)
+
+  // AI featured image state for manual articles
+  const [imagePrompt, setImagePrompt] = useState('')
+  const [generatingImage, setGeneratingImage] = useState(false)
+  const [imageGenError, setImageGenError] = useState<string | null>(null)
+  const [imageGenSuccess, setImageGenSuccess] = useState(false)
 
   const [form, setForm] = useState({
     title: article?.title ?? '',
@@ -116,6 +122,57 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
       setGenError(err instanceof Error ? err.message : 'Generation failed')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  // ── Generate featured image for manual articles ───────────────
+  const handleGenerateFeaturedImage = async () => {
+    const topicName = topics.find((t) => t.id === form.topic_id)?.name ?? ''
+    const fallbackPrompt = [
+      form.title ? `Security article hero image for: ${form.title}` : '',
+      form.excerpt ? `Article summary: ${form.excerpt}` : '',
+      topicName ? `Security category: ${topicName}` : '',
+      'Create a professional, clean, corporate-style illustration suitable for a StaySecure360 article hero image.',
+      'Use a modern cyber and workplace security theme. No text, no letters, no logos, no readable screens, and no identifiable faces.',
+    ].filter(Boolean).join(' ')
+
+    const finalPrompt = imagePrompt.trim() || fallbackPrompt
+
+    if (!finalPrompt.trim()) {
+      setImageGenError('Add a title, excerpt, or custom image prompt first.')
+      return
+    }
+
+    const slug = form.slug || generateSlug(form.title || 'manual-article')
+
+    setGeneratingImage(true)
+    setImageGenError(null)
+    setImageGenSuccess(false)
+
+    try {
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imagePrompt: finalPrompt, slug }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error ?? 'Image generation failed')
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        slug: prev.slug || slug,
+        featured_image_url: data.featuredImageUrl ?? prev.featured_image_url,
+      }))
+      setImageGenSuccess(true)
+      setTimeout(() => setImageGenSuccess(false), 4000)
+    } catch (err: unknown) {
+      setImageGenError(err instanceof Error ? err.message : 'Image generation failed')
+    } finally {
+      setGeneratingImage(false)
     }
   }
 
@@ -398,18 +455,73 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
           </div>
 
           {/* Featured image */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <label htmlFor="field-image" className="block text-sm font-medium text-gray-700 mb-1">
-              Featured Image URL
-            </label>
-            <input
-              id="field-image"
-              name="featured_image_url"
-              value={form.featured_image_url}
-              onChange={handleChange}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-gray-900 text-sm"
-              placeholder="https://..."
-            />
+          <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
+            <div>
+              <label htmlFor="field-image" className="block text-sm font-medium text-gray-700 mb-1">
+                Featured Image URL
+              </label>
+              <input
+                id="field-image"
+                name="featured_image_url"
+                value={form.featured_image_url}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-gray-900 text-sm"
+                placeholder="https://..."
+              />
+            </div>
+
+            {form.featured_image_url && (
+              <img
+                src={form.featured_image_url}
+                alt="Featured image preview"
+                className="w-full aspect-video object-cover rounded-lg border border-gray-200"
+              />
+            )}
+
+            <div>
+              <label htmlFor="field-image-prompt" className="block text-xs font-medium text-gray-600 mb-1">
+                Optional AI Image Prompt
+              </label>
+              <textarea
+                id="field-image-prompt"
+                value={imagePrompt}
+                onChange={(e) => setImagePrompt(e.target.value)}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-gray-900 text-sm resize-none"
+                placeholder="Leave blank to generate from the title, excerpt, and topic."
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGenerateFeaturedImage}
+              disabled={generatingImage || !form.title.trim()}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white text-sm font-medium rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-60"
+            >
+              {generatingImage ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Generating image…
+                </>
+              ) : (
+                <>
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  Generate AI Image
+                </>
+              )}
+            </button>
+
+            {imageGenSuccess && (
+              <p className="text-xs text-green-600 font-medium">Image generated and added to this article.</p>
+            )}
+            {imageGenError && (
+              <p className="flex items-center gap-1 text-xs text-red-600">
+                <AlertTriangle className="w-3.5 h-3.5" /> {imageGenError}
+              </p>
+            )}
+            <p className="text-xs text-gray-500">
+              The image is created with OpenAI, uploaded to Supabase Storage, and the URL is saved into this article when you save or publish.
+            </p>
           </div>
 
           {/* SEO */}
