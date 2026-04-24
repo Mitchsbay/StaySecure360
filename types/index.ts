@@ -35,6 +35,12 @@ export interface Article {
   youtube_video_id: string | null
   meta_title: string | null
   meta_description: string | null
+  // Optional future SEO/OG fields. These are safe even before DB columns exist.
+  og_title?: string | null
+  og_description?: string | null
+  og_image_url?: string | null
+  seo_keywords?: string[] | string | null
+  image_alt_text?: string | null
   published_at: string | null
   created_by: string | null
   created_at: string

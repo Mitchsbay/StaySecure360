@@ -60,6 +60,7 @@ export default async function ArticlePage({ params }: Props) {
     breadcrumbSchema([
       { name: 'Home', url: '/' },
       { name: 'Articles', url: '/articles' },
+      ...(article.topic ? [{ name: article.topic.name, url: `/topics/${article.topic.slug}` }] : []),
       { name: article.title, url: `/articles/${article.slug}` },
     ]),
   ]
