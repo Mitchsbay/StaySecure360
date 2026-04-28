@@ -13,7 +13,7 @@
 //   /api/generate-image using the image_prompt returned here.
 // ============================================================
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 30
 
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
@@ -218,66 +218,58 @@ const pickFallbackLinkTargets = (
     }))
 }
 
-const enforceInternalLinkInjection = async (
-  openai: OpenAI,
+const injectMarkdownLinks = (
+  content: string,
+  targets: InternalLinkTarget[]
+) => {
+  if (!content || targets.length === 0 || articleContainsInternalLinks(content)) return content
+
+  const paragraphs = content.split(/\n\n+/)
+  let linkIndex = 0
+
+  const linkedParagraphs = paragraphs.map((paragraph) => {
+    if (linkIndex >= targets.length) return paragraph
+
+    const trimmed = paragraph.trim()
+    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('- ') || /^\d+\./.test(trimmed)) return paragraph
+    if (trimmed.length < 180 || /^(FAQ|Checklist|Quick Checklist)/i.test(trimmed)) return paragraph
+
+    const target = targets[linkIndex]
+    const slug = target.slug.replace(/^\/+|\/+$/g, '')
+    const anchor = target.anchor || target.title
+    const sentenceParts = paragraph.split(/(?<=[.!?])\s+/)
+    const sentenceIndex = sentenceParts.findIndex((sentence) => sentence.length > 110 && !sentence.includes('](/articles/'))
+    if (sentenceIndex === -1) return paragraph
+
+    sentenceParts[sentenceIndex] = `${sentenceParts[sentenceIndex]} It connects closely with [${anchor}](/articles/${slug}).`
+    linkIndex += 1
+    return sentenceParts.join(' ')
+  })
+
+  return linkedParagraphs.join('\n\n')
+}
+
+const enforceInternalLinkInjection = (
   draft: GeneratedArticleDraft & { article?: string; internal_links?: InternalLinkTarget[]; internal_link_targets?: InternalLinkTarget[] },
   candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
   prompt: string
 ) => {
-  if (!draft.content || candidates.length === 0 || articleContainsInternalLinks(draft.content)) return draft
+  if (!draft.content || candidates.length === 0) return draft
 
-  const candidateContext = linkCandidateText(candidates.slice(0, 8))
+  const existingLinks = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
+  const targets = existingLinks.length > 0
+    ? existingLinks.slice(0, 3)
+    : pickFallbackLinkTargets(candidates, draft, prompt).slice(0, 3)
 
-  try {
-    const linkPass = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an editor for StaySecure360. Your only job is to add contextual internal links to an existing article without changing its voice, structure, facts, or meaning.
-
-Rules:
-- Use only the supplied article candidates and exact slugs.
-- Add 1-3 natural Markdown links in the article body using this format: [natural anchor text](/articles/slug).
-- Do not add a related articles section.
-- Do not add new paragraphs just to link.
-- Do not rewrite the article heavily.
-- Do not use generic anchor text like click here, read more, or this article.
-- If a link does not fit naturally, use fewer links.
-- Return only valid JSON.`
-        },
-        {
-          role: 'user',
-          content: `ORIGINAL TOPIC:\n${prompt}\n\nAVAILABLE INTERNAL ARTICLE CANDIDATES:\n${candidateContext}\n\nARTICLE TO EDIT:\n${draft.content}\n\nReturn JSON in this shape:\n{\n  "content": "edited article body only",\n  "internal_links": [\n    {"title":"candidate title", "slug":"candidate-slug", "anchor":"anchor used", "reason":"why it fits"}\n  ]\n}`,
-        },
-      ],
-      temperature: 0.35,
-      max_tokens: 3000,
-      response_format: { type: 'json_object' },
-    })
-
-    const raw = linkPass.choices[0]?.message?.content
-    if (!raw) return draft
-    const parsed = JSON.parse(raw) as { content?: string; internal_links?: InternalLinkTarget[] }
-    const parsedLinks = parseInternalLinks(parsed.internal_links)
-
-    if (parsed.content && articleContainsInternalLinks(parsed.content) && parsedLinks.length > 0) {
-      draft.content = parsed.content
-      draft.article = parsed.content
-      draft.internal_links = parsedLinks
-      draft.internal_link_targets = parsedLinks
-      return draft
-    }
-  } catch (error) {
-    console.warn('Internal link injection pass failed:', error)
+  if (!articleContainsInternalLinks(draft.content)) {
+    draft.content = injectMarkdownLinks(draft.content, targets)
+    draft.article = draft.content
   }
 
-  const fallbackLinks = pickFallbackLinkTargets(candidates, draft, prompt)
-  draft.internal_links = fallbackLinks
-  draft.internal_link_targets = fallbackLinks
+  draft.internal_links = targets
+  draft.internal_link_targets = targets
   return draft
 }
-
 const buildSystemPrompt = (structureMode: StructureMode) => `You are writing for StaySecure360 as a seasoned security operator and risk professional with real-world experience in physical security, workplace risk, home security, digital security, human behaviour, and organisational failure.
 
 You are not writing as an AI assistant.
@@ -660,7 +652,7 @@ export async function POST(request: NextRequest) {
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.92,
-      max_tokens: 4000,
+      max_tokens: 2600,
       response_format: { type: 'json_object' },
     })
 
@@ -714,7 +706,7 @@ export async function POST(request: NextRequest) {
     draft.internal_links = parsedLinks
     draft.internal_link_targets = parsedLinks
 
-    draft = await enforceInternalLinkInjection(openai, draft, linkCandidates, prompt)
+    draft = enforceInternalLinkInjection(draft, linkCandidates, prompt)
 
     if (Array.isArray(draft.keyword_suggestions)) {
       draft.keyword_suggestions = draft.keyword_suggestions
