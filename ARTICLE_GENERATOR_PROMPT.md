@@ -89,3 +89,16 @@ Public topic pages now act as pillar hubs:
 ## Deployment note
 
 Run the Phase 2 Supabase SQL before saving generated drafts so the article metadata fields exist.
+
+## Backend hardening added
+
+The API now performs a second internal-link injection pass after the main article is generated. If the article body does not already contain contextual `/articles/...` Markdown links, the backend sends the draft and the existing published article candidates through a focused editor pass that only inserts 1–3 natural internal links.
+
+This means the user does not need to add linking instructions manually. The generator fetches published articles, supplies them to the model, validates that links were inserted, and stores the selected link targets in CMS metadata.
+
+Additional anti-generic controls were also added:
+
+- start from a real-world observation, not a generic topic introduction
+- avoid explainer phrases such as “Let’s break this down” and “Another common issue”
+- avoid polished slogans and neat conclusions
+- avoid checklist-style output unless the structure mode genuinely calls for it

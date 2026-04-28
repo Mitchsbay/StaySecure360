@@ -160,6 +160,124 @@ const parseInternalLinks = (value: unknown): InternalLinkTarget[] => {
     .slice(0, 4)
 }
 
+
+const articleContainsInternalLinks = (content?: string | null) =>
+  Boolean(content && /\[[^\]]+\]\(\/articles\/[^)]+\)/.test(content))
+
+const linkCandidateText = (candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>) =>
+  candidates
+    .map((article, index) => {
+      const parts = [`${index + 1}. Title: ${article.title}`, `Slug: ${article.slug}`]
+      if (article.excerpt) parts.push(`Excerpt: ${article.excerpt}`)
+      if (article.content_cluster) parts.push(`Cluster: ${article.content_cluster}`)
+      if (article.pillar_topic) parts.push(`Pillar: ${article.pillar_topic}`)
+      return parts.join(' | ')
+    })
+    .join('\n')
+
+const pickFallbackLinkTargets = (
+  candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
+  draft: Partial<GeneratedArticleDraft>,
+  prompt: string
+): InternalLinkTarget[] => {
+  const haystack = normaliseName([
+    prompt,
+    draft.title,
+    draft.category,
+    draft.subcategory,
+    draft.content_cluster,
+    draft.pillar_topic,
+    ...(draft.keyword_suggestions ?? []),
+  ].filter(Boolean).join(' '))
+
+  const scored = candidates.map((candidate) => {
+    const candidateText = normaliseName([
+      candidate.title,
+      candidate.excerpt,
+      candidate.content_cluster,
+      candidate.pillar_topic,
+    ].filter(Boolean).join(' '))
+    const candidateWords = new Set(candidateText.split(' ').filter((word) => word.length > 3))
+    const score = haystack.split(' ').filter((word) => word.length > 3 && candidateWords.has(word)).length
+    return { candidate, score }
+  })
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .filter((item) => item.score > 0 || scored.length <= 3)
+    .slice(0, 3)
+    .map(({ candidate }) => ({
+      title: candidate.title,
+      slug: candidate.slug.replace(/^\/+|\/+$/g, ''),
+      anchor: candidate.title
+        .replace(/^(Why|How|What|When|Where)\s+/i, '')
+        .replace(/\s*\([^)]*\)\s*/g, '')
+        .trim()
+        .slice(0, 80) || candidate.title.slice(0, 80),
+      reason: 'Automatically selected as a related internal article candidate.',
+    }))
+}
+
+const enforceInternalLinkInjection = async (
+  openai: OpenAI,
+  draft: GeneratedArticleDraft & { article?: string; internal_links?: InternalLinkTarget[]; internal_link_targets?: InternalLinkTarget[] },
+  candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
+  prompt: string
+) => {
+  if (!draft.content || candidates.length === 0 || articleContainsInternalLinks(draft.content)) return draft
+
+  const candidateContext = linkCandidateText(candidates.slice(0, 8))
+
+  try {
+    const linkPass = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an editor for StaySecure360. Your only job is to add contextual internal links to an existing article without changing its voice, structure, facts, or meaning.
+
+Rules:
+- Use only the supplied article candidates and exact slugs.
+- Add 1-3 natural Markdown links in the article body using this format: [natural anchor text](/articles/slug).
+- Do not add a related articles section.
+- Do not add new paragraphs just to link.
+- Do not rewrite the article heavily.
+- Do not use generic anchor text like click here, read more, or this article.
+- If a link does not fit naturally, use fewer links.
+- Return only valid JSON.`
+        },
+        {
+          role: 'user',
+          content: `ORIGINAL TOPIC:\n${prompt}\n\nAVAILABLE INTERNAL ARTICLE CANDIDATES:\n${candidateContext}\n\nARTICLE TO EDIT:\n${draft.content}\n\nReturn JSON in this shape:\n{\n  "content": "edited article body only",\n  "internal_links": [\n    {"title":"candidate title", "slug":"candidate-slug", "anchor":"anchor used", "reason":"why it fits"}\n  ]\n}`,
+        },
+      ],
+      temperature: 0.35,
+      max_tokens: 3000,
+      response_format: { type: 'json_object' },
+    })
+
+    const raw = linkPass.choices[0]?.message?.content
+    if (!raw) return draft
+    const parsed = JSON.parse(raw) as { content?: string; internal_links?: InternalLinkTarget[] }
+    const parsedLinks = parseInternalLinks(parsed.internal_links)
+
+    if (parsed.content && articleContainsInternalLinks(parsed.content) && parsedLinks.length > 0) {
+      draft.content = parsed.content
+      draft.article = parsed.content
+      draft.internal_links = parsedLinks
+      draft.internal_link_targets = parsedLinks
+      return draft
+    }
+  } catch (error) {
+    console.warn('Internal link injection pass failed:', error)
+  }
+
+  const fallbackLinks = pickFallbackLinkTargets(candidates, draft, prompt)
+  draft.internal_links = fallbackLinks
+  draft.internal_link_targets = fallbackLinks
+  return draft
+}
+
 const buildSystemPrompt = (structureMode: StructureMode) => `You are writing for StaySecure360 as a seasoned security operator and risk professional with real-world experience in physical security, workplace risk, home security, digital security, human behaviour, and organisational failure.
 
 You are not writing as an AI assistant.
@@ -314,6 +432,35 @@ Use occasional:
 But do not add fake typos.
 Do not make the writing look careless.
 
+ANTI-EXPLAINER OVERRIDE:
+
+If the article starts to sound like a clean explanation, guide, training note, or topic breakdown, rewrite it from a real-world observation instead.
+
+Avoid phrases such as:
+- "Let's break this down"
+- "There are several reasons"
+- "Another common issue"
+- "A significant issue"
+- "In many cases"
+- "So, what can you do"
+- "Ultimately"
+
+OPENING RULE:
+
+Start with a specific, ordinary real-world moment involving the topic. Do not start with a general statement about why the topic is important.
+
+CHECKLIST OVERRIDE:
+
+Do not include a checklist unless the selected structure mode requires one and it genuinely helps. If included, make it informal and uneven, not a polished training template.
+
+ANTI-POLISH RULE:
+
+Avoid sentences that sound like slogans, neat conclusions, or advice headlines. If a sentence sounds quote-worthy, make it plainer and more casual.
+
+ENDING RULE:
+
+Do not conclude the article cleanly. End at a natural stopping point, not with a polished takeaway.
+
 SEO AND OUTPUT RULES:
 
 Return ONLY valid JSON with exactly these keys:
@@ -466,14 +613,14 @@ export async function POST(request: NextRequest) {
     .limit(18)
 
   const linkCandidates = (existingArticles ?? [])
-    .map((article) => ({
-      title: article.title,
-      slug: article.slug,
-      excerpt: article.excerpt,
-      content_cluster: article.content_cluster,
-      pillar_topic: article.pillar_topic,
-    }))
     .filter((article) => article.title && article.slug)
+    .map((article) => ({
+      title: String(article.title),
+      slug: String(article.slug).replace(/^\/+|\/+$/g, ''),
+      excerpt: article.excerpt ? String(article.excerpt) : null,
+      content_cluster: article.content_cluster ? String(article.content_cluster) : null,
+      pillar_topic: article.pillar_topic ? String(article.pillar_topic) : null,
+    }))
 
   const systemPrompt = buildSystemPrompt(structureMode)
 
@@ -566,6 +713,8 @@ export async function POST(request: NextRequest) {
     const parsedLinks = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
     draft.internal_links = parsedLinks
     draft.internal_link_targets = parsedLinks
+
+    draft = await enforceInternalLinkInjection(openai, draft, linkCandidates, prompt)
 
     if (Array.isArray(draft.keyword_suggestions)) {
       draft.keyword_suggestions = draft.keyword_suggestions
