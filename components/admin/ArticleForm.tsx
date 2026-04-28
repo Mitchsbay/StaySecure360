@@ -13,6 +13,17 @@ interface ArticleFormProps {
   mode: 'new' | 'edit'
 }
 
+const readJsonResponse = async (res: Response) => {
+  const text = await res.text()
+  if (!text) return {}
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { error: text.slice(0, 500) || 'Server returned a non-JSON response' }
+  }
+}
+
 export default function ArticleForm({ article, topics, mode }: ArticleFormProps) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
@@ -122,11 +133,11 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
       })
 
       if (!res.ok) {
-        const data = await res.json()
+        const data = await readJsonResponse(res)
         throw new Error(data.error ?? 'Generation failed')
       }
 
-      const data = await res.json()
+      const data = await readJsonResponse(res)
       const draft = data.draft
 
       // Fill in all form fields with the generated content
@@ -174,7 +185,7 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
         }),
       })
 
-      const data = await res.json()
+      const data = await readJsonResponse(res)
 
       if (!res.ok) {
         throw new Error(data.error ?? 'SEO metadata generation failed')
@@ -225,7 +236,7 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
         body: JSON.stringify({ imagePrompt: finalPrompt, slug }),
       })
 
-      const data = await res.json()
+      const data = await readJsonResponse(res)
 
       if (!res.ok) {
         throw new Error(data.error ?? 'Image generation failed')

@@ -7,6 +7,17 @@ import { createClient } from '@/lib/supabase/client'
 import { generateSlug } from '@/lib/utils'
 import type { GeneratedArticleDraft, Topic } from '@/types'
 
+const readJsonResponse = async (res: Response) => {
+  const text = await res.text()
+  if (!text) return {}
+
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { error: text.slice(0, 500) || 'Server returned a non-JSON response' }
+  }
+}
+
 export default function GenerateArticlePage() {
   const router = useRouter()
 
@@ -100,11 +111,11 @@ export default function GenerateArticlePage() {
       })
 
       if (!res.ok) {
-        const data = await res.json()
+        const data = await readJsonResponse(res)
         throw new Error(data.error ?? 'Text generation failed')
       }
 
-      const data = await res.json()
+      const data = await readJsonResponse(res)
       const generatedDraft = data.draft as GeneratedArticleDraft & { image_prompt?: string }
       setDraft(generatedDraft)
       setSlugFromDraft(generatedDraft.slug ?? generateSlug(generatedDraft.title))
@@ -137,7 +148,7 @@ export default function GenerateArticlePage() {
         body: JSON.stringify({ imagePrompt: imgPrompt, slug }),
       })
 
-      const data = await res.json()
+      const data = await readJsonResponse(res)
 
       if (!res.ok) {
         throw new Error(data.error ?? 'Image generation failed')

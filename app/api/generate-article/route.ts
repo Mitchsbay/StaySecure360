@@ -270,6 +270,21 @@ const enforceInternalLinkInjection = (
   draft.internal_link_targets = targets
   return draft
 }
+const jsonError = (message: string, status = 500, details?: unknown) =>
+  NextResponse.json(
+    {
+      error: message,
+      ...(process.env.NODE_ENV !== 'production' && details ? { details } : {}),
+    },
+    { status }
+  )
+
+const getErrorMessage = (err: unknown, fallback = 'Article generation failed') => {
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'string' && err.trim()) return err
+  return fallback
+}
+
 const buildSystemPrompt = (structureMode: StructureMode) => `You are writing for StaySecure360 as a seasoned security operator and risk professional with real-world experience in physical security, workplace risk, home security, digital security, human behaviour, and organisational failure.
 
 You are not writing as an AI assistant.
@@ -545,7 +560,8 @@ The visible article should read as a normal article. The internal links should b
 Set ai_structure_mode to the current structure mode.`
 
 export async function POST(request: NextRequest) {
-  const openai = new OpenAI({
+  try {
+    const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY ?? '',
   })
 
@@ -722,5 +738,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 })
   }
 
-  return NextResponse.json({ draft }, { status: 200 })
+    return NextResponse.json({ draft }, { status: 200 })
+  } catch (err: unknown) {
+    console.error('/api/generate-article fatal error:', err)
+    return jsonError(getErrorMessage(err), 500, err)
+  }
 }
