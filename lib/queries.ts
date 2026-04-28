@@ -109,7 +109,8 @@ export async function getRelatedArticles(
   articleId: string,
   topicId: string | null,
   limit = 3,
-  internalLinkTargets?: Article['internal_link_targets']
+  internalLinkTargets?: Article['internal_link_targets'],
+  contentCluster?: string | null
 ): Promise<Article[]> {
   const supabase = createPublicClient()
   const targetSlugs = parseInternalLinkTargets(internalLinkTargets)
@@ -133,6 +134,25 @@ export async function getRelatedArticles(
           .map((slug) => data.find((article) => article.slug === slug))
           .filter(Boolean) as Article[]
       )
+    }
+  }
+
+  if (preferred.length >= limit) return preferred.slice(0, limit)
+
+  if (contentCluster) {
+    const { data: clusterData } = await supabase
+      .from('articles')
+      .select('*, topic:topics(*)')
+      .eq('status', 'published')
+      .eq('content_cluster', contentCluster)
+      .neq('id', articleId)
+      .order('published_at', { ascending: false })
+      .limit(limit)
+
+    if (clusterData) {
+      const preferredIds = new Set(preferred.map((article) => article.id))
+      const clusterMatches = clusterData.filter((article) => !preferredIds.has(article.id))
+      preferred.push(...clusterMatches)
     }
   }
 

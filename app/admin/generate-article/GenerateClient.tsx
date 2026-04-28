@@ -134,6 +134,7 @@ export default function GenerateArticlePage() {
         meta_title: draft.meta_title,
         meta_description: draft.meta_description,
         featured_image_url: featuredImageUrl ?? null,
+        topic_id: draft.topic_id ?? null,
         image_prompt: draft.image_prompt ?? imagePromptFromDraft ?? null,
         seo_keywords: draft.keyword_suggestions ?? [],
         content_cluster: draft.content_cluster ?? null,
@@ -472,6 +473,33 @@ export default function GenerateArticlePage() {
                   <p className="text-sm text-gray-700">{draft.meta_description}</p>
                 </div>
               </div>
+
+              {/* Auto classification */}
+              {(draft.category || draft.subcategory || draft.content_cluster || draft.internal_links?.length) && (
+                <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 space-y-2">
+                  <label className="text-xs font-semibold text-blue-700 uppercase tracking-wider block">Auto Classification</label>
+                  {(draft.category || draft.subcategory) && (
+                    <p className="text-sm text-blue-900">
+                      {draft.category}{draft.subcategory ? ` → ${draft.subcategory}` : ''}
+                    </p>
+                  )}
+                  {draft.content_cluster && (
+                    <p className="text-xs text-blue-700">Cluster: {draft.content_cluster}</p>
+                  )}
+                  {draft.internal_links?.length ? (
+                    <div className="pt-1">
+                      <p className="text-xs font-medium text-blue-700 mb-1">Suggested internal links:</p>
+                      <ul className="space-y-1">
+                        {draft.internal_links.map((link, i) => (
+                          <li key={i} className="text-xs text-blue-800">
+                            {link.anchor} → /articles/{link.slug}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </div>
+              )}
 
               {/* Content preview */}
               <div>

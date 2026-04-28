@@ -117,6 +117,7 @@ export interface GeneratedArticleDraft {
   image_prompt?: string
   category?: string
   subcategory?: string
+  topic_id?: string | null
   includeChecklist?: boolean
   includeFAQ?: boolean
   key_takeaways: string[]

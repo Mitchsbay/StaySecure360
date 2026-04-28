@@ -497,7 +497,6 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
               {childTopicsByParent.map(({ parent, children }) => (
                 children.length > 0 ? (
                   <optgroup key={parent.id} label={parent.name}>
-                    <option value={parent.id}>{parent.name}</option>
                     {children.map((child) => (
                       <option key={child.id} value={child.id}>
                         {child.name}

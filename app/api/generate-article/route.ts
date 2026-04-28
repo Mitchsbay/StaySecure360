@@ -34,15 +34,78 @@ const structureModes: StructureMode[] = [
   'article_with_checklist_and_faq',
 ]
 
+type TopicCandidate = {
+  id: string
+  name: string
+  slug: string
+  parent_id: string | null
+}
+
+const normaliseName = (input?: string | null) =>
+  input
+    ?.toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim() || ''
+
+const findBestTopic = (
+  topics: TopicCandidate[],
+  names: Array<string | null | undefined>
+): TopicCandidate | null => {
+  const childTopics = topics.filter((topic) => topic.parent_id)
+  const allTopics = [...childTopics, ...topics.filter((topic) => !topic.parent_id)]
+
+  for (const name of names) {
+    const normalised = normaliseName(name)
+    if (!normalised) continue
+
+    const direct = allTopics.find((topic) =>
+      normaliseName(topic.name) === normalised || normaliseName(topic.slug) === normalised
+    )
+    if (direct) return direct
+
+    const partial = childTopics.find((topic) => {
+      const topicName = normaliseName(topic.name)
+      return topicName && (normalised.includes(topicName) || topicName.includes(normalised))
+    })
+    if (partial) return partial
+  }
+
+  return null
+}
+
+const buildTopicTaxonomy = (topics: TopicCandidate[]) => {
+  const parents = topics.filter((topic) => !topic.parent_id)
+  return parents
+    .map((parent) => {
+      const children = topics
+        .filter((topic) => topic.parent_id === parent.id)
+        .map((child) => '  - ' + child.name + ' [slug: ' + child.slug + ', id: ' + child.id + ']')
+        .join('\n')
+
+      return children
+        ? '- ' + parent.name + ' [slug: ' + parent.slug + ', id: ' + parent.id + ']\n' + children
+        : '- ' + parent.name + ' [slug: ' + parent.slug + ', id: ' + parent.id + ']'
+    })
+    .join('\n')
+}
+
 const contentClusterMap: Record<string, { pillar: string; cluster: string }> = {
   'Physical Security': { pillar: 'Physical Security', cluster: 'physical-security-practice' },
   'Access Control': { pillar: 'Physical Security', cluster: 'access-control-failures' },
+  'CCTV & Surveillance': { pillar: 'Physical Security', cluster: 'cctv-real-world-use' },
   'Surveillance Systems': { pillar: 'Physical Security', cluster: 'cctv-real-world-use' },
+  'Perimeter Security': { pillar: 'Physical Security', cluster: 'perimeter-security' },
   'Workplace Awareness': { pillar: 'Workplace Awareness', cluster: 'human-behaviour-risk' },
   'Human Behaviour': { pillar: 'Workplace Awareness', cluster: 'predictability-and-routine' },
   'Security Culture': { pillar: 'Workplace Awareness', cluster: 'security-culture-drift' },
   'Digital Threats': { pillar: 'Digital Threats', cluster: 'digital-risk-basics' },
   'Network Security': { pillar: 'Digital Threats', cluster: 'remote-work-network-risk' },
+  'Data Protection': { pillar: 'Digital Threats', cluster: 'data-exposure' },
+  'Authentication & Passwords': { pillar: 'Digital Threats', cluster: 'authentication-failures' },
+  'Public Wi-Fi Risks': { pillar: 'Remote Work Security', cluster: 'public-wifi-risk' },
+  'Home Network Security': { pillar: 'Remote Work Security', cluster: 'home-network-risk' },
+  'Device Security': { pillar: 'Remote Work Security', cluster: 'device-security' },
   'Social Engineering': { pillar: 'Social Engineering', cluster: 'social-engineering-patterns' },
   'Phishing & Deception': { pillar: 'Social Engineering', cluster: 'phishing-human-factors' },
   'Physical Social Engineering': { pillar: 'Social Engineering', cluster: 'physical-social-engineering' },
@@ -265,6 +328,7 @@ Return ONLY valid JSON with exactly these keys:
   "image_prompt": "string",
   "category": "string",
   "subcategory": "string",
+  "topic_id": "string or null",
   "includeChecklist": true,
   "includeFAQ": false,
   "key_takeaways": ["string", "string", "string"],
@@ -284,7 +348,7 @@ Return ONLY valid JSON with exactly these keys:
 
 The article and content fields must contain the same visible article body in Markdown.
 
-The excerpt, slug, meta_title, meta_description, image_prompt, category, subcategory, includeChecklist, includeFAQ, key_takeaways, checklist_items, faq_items, suggested_topic, keyword_suggestions, content_cluster, pillar_topic, internal_links, and ai_structure_mode fields are for the CMS only and must not be repeated as labelled metadata inside the article/content body.
+The excerpt, slug, meta_title, meta_description, image_prompt, category, subcategory, topic_id, includeChecklist, includeFAQ, key_takeaways, checklist_items, faq_items, suggested_topic, keyword_suggestions, content_cluster, pillar_topic, internal_links, and ai_structure_mode fields are for the CMS only and must not be repeated as labelled metadata inside the article/content body.
 
 Do not place "Excerpt", "Slug", "Image Prompt", "Meta Title", "Meta Description", "Keyword Suggestions", "Category", or "Subcategory" headings inside the article/content field.
 
@@ -303,6 +367,15 @@ No dramatic masked burglar unless the topic specifically requires it.
 No cartoon style.
 No obvious stock-photo feel.
 Keep it grounded and believable.
+
+TAXONOMY RULES:
+
+Use the supplied available taxonomy to choose the best child topic/subcategory for this article.
+Prefer child topics over parent topics.
+Return the selected topic id in topic_id exactly as supplied.
+Return category as the parent topic name and subcategory as the selected child topic name where possible.
+If no child topic fits, use the closest parent topic id.
+Do not invent category or subcategory names outside the supplied taxonomy unless none are relevant.
 
 CONTENT ENGINE RULES:
 
@@ -361,6 +434,14 @@ export async function POST(request: NextRequest) {
   const appliedTone = tone?.trim() || fallbackToneMode
   const requestedCluster = resolveCluster(topic, undefined, prompt)
 
+  const { data: availableTopics } = await adminClient
+    .from('topics')
+    .select('id, name, slug, parent_id')
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
+
+  const taxonomy = buildTopicTaxonomy((availableTopics ?? []) as TopicCandidate[])
+
   const { data: existingArticles } = await adminClient
     .from('articles')
     .select('title, slug, excerpt, content_cluster, pillar_topic')
@@ -384,7 +465,8 @@ export async function POST(request: NextRequest) {
     `TOPIC: ${prompt}`,
     audience ? `TARGET AUDIENCE: ${audience}` : '',
     `TONE MODE: ${appliedTone}`,
-    topic ? `CATEGORY: ${topic}` : '',
+    topic ? `OPTIONAL USER CATEGORY GUIDANCE: ${topic}` : '',
+    taxonomy ? `AVAILABLE TAXONOMY (choose the best topic_id from this list):\n${taxonomy}` : '',
     `RECOMMENDED PILLAR TOPIC: ${requestedCluster.pillar}`,
     `RECOMMENDED CONTENT CLUSTER: ${requestedCluster.cluster}`,
     keywords ? `TARGET KEYWORDS: ${keywords}` : '',
@@ -402,6 +484,7 @@ export async function POST(request: NextRequest) {
     subcategory?: string
     includeChecklist?: boolean
     includeFAQ?: boolean
+    topic_id?: string | null
     internal_links?: InternalLinkTarget[]
     internal_link_targets?: InternalLinkTarget[]
   })
@@ -446,6 +529,18 @@ export async function POST(request: NextRequest) {
 
     if (!draft.meta_description) {
       draft.meta_description = draft.excerpt?.slice(0, 160) ?? ''
+    }
+
+    const topicCandidates = (availableTopics ?? []) as TopicCandidate[]
+    const matchedTopic =
+      topicCandidates.find((candidate) => candidate.id === draft.topic_id) ||
+      findBestTopic(topicCandidates, [draft.subcategory, draft.suggested_topic, draft.category, topic, prompt])
+
+    if (matchedTopic) {
+      const parent = topicCandidates.find((candidate) => candidate.id === matchedTopic.parent_id)
+      draft.topic_id = matchedTopic.id
+      draft.subcategory = matchedTopic.parent_id ? matchedTopic.name : (draft.subcategory || matchedTopic.name)
+      draft.category = parent?.name || draft.category || matchedTopic.name
     }
 
     const clusterFromDraft = resolveCluster(draft.category || topic, draft.subcategory, prompt)
