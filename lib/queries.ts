@@ -4,7 +4,7 @@
 // ============================================================
 import { createPublicClient } from '@/lib/supabase/public'
 import { createClient as createServerClient } from '@/lib/supabase/server'
-import type { Article, Topic, Faq, ChecklistItem } from '@/types'
+import type { Article, Topic, Faq, ChecklistItem, InternalLinkTarget } from '@/types'
 
 // ============================================================
 // TOPICS
@@ -15,6 +15,7 @@ export async function getAllTopics(): Promise<Topic[]> {
   const { data, error } = await supabase
     .from('topics')
     .select('*')
+    .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
 
   if (error) {
@@ -87,23 +88,74 @@ export async function getArticlesByTopic(topicId: string, limit?: number): Promi
   return data ?? []
 }
 
-export async function getRelatedArticles(articleId: string, topicId: string | null, limit = 3): Promise<Article[]> {
+function parseInternalLinkTargets(value: Article['internal_link_targets']): InternalLinkTarget[] {
+  if (!value) return []
+
+  if (Array.isArray(value)) return value as InternalLinkTarget[]
+
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  return []
+}
+
+export async function getRelatedArticles(
+  articleId: string,
+  topicId: string | null,
+  limit = 3,
+  internalLinkTargets?: Article['internal_link_targets']
+): Promise<Article[]> {
   const supabase = createPublicClient()
+  const targetSlugs = parseInternalLinkTargets(internalLinkTargets)
+    .map((target) => target.slug)
+    .filter(Boolean)
+    .slice(0, limit)
+
+  const preferred: Article[] = []
+
+  if (targetSlugs.length > 0) {
+    const { data } = await supabase
+      .from('articles')
+      .select('*, topic:topics(*)')
+      .eq('status', 'published')
+      .in('slug', targetSlugs)
+      .neq('id', articleId)
+
+    if (data) {
+      preferred.push(
+        ...targetSlugs
+          .map((slug) => data.find((article) => article.slug === slug))
+          .filter(Boolean) as Article[]
+      )
+    }
+  }
+
+  if (preferred.length >= limit) return preferred.slice(0, limit)
+
   let query = supabase
     .from('articles')
     .select('*, topic:topics(*)')
     .eq('status', 'published')
     .neq('id', articleId)
     .order('published_at', { ascending: false })
-    .limit(limit)
+    .limit(limit + preferred.length)
 
   if (topicId) {
     query = query.eq('topic_id', topicId)
   }
 
   const { data, error } = await query
-  if (error) return []
-  return data ?? []
+  if (error) return preferred
+
+  const preferredIds = new Set(preferred.map((article) => article.id))
+  const fallback = (data ?? []).filter((article) => !preferredIds.has(article.id))
+  return [...preferred, ...fallback].slice(0, limit)
 }
 
 // ============================================================

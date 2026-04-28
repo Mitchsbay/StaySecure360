@@ -11,7 +11,8 @@ export async function GET() {
   const adminClient = createAdminClient()
   const { data: topics, error } = await adminClient
     .from('topics')
-    .select('id, name, slug')
+    .select('id, name, slug, parent_id, sort_order')
+    .order('sort_order', { ascending: true })
     .order('name', { ascending: true })
 
   if (error) {

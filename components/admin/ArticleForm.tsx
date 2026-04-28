@@ -49,6 +49,19 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
     meta_description: article?.meta_description ?? '',
   })
 
+  const parentTopics = topics.filter((topic) => !topic.parent_id)
+  const childTopicsByParent = parentTopics.map((parent) => ({
+    parent,
+    children: topics.filter((topic) => topic.parent_id === parent.id),
+  }))
+  const ungroupedTopics = topics.filter((topic) =>
+    topic.parent_id && !topics.some((parent) => parent.id === topic.parent_id)
+  )
+
+  const getTopicLabel = (topic: Topic) => {
+    const parent = topics.find((item) => item.id === topic.parent_id)
+    return parent ? `${parent.name} — ${topic.name}` : topic.name
+  }
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
@@ -481,10 +494,22 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-gray-900"
             >
               <option value="">No topic</option>
-              {topics.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
+              {childTopicsByParent.map(({ parent, children }) => (
+                children.length > 0 ? (
+                  <optgroup key={parent.id} label={parent.name}>
+                    <option value={parent.id}>{parent.name}</option>
+                    {children.map((child) => (
+                      <option key={child.id} value={child.id}>
+                        {child.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                ) : (
+                  <option key={parent.id} value={parent.id}>{parent.name}</option>
+                )
+              ))}
+              {ungroupedTopics.map((topic) => (
+                <option key={topic.id} value={topic.id}>{getTopicLabel(topic)}</option>
               ))}
             </select>
           </div>

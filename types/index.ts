@@ -18,6 +18,8 @@ export interface Topic {
   description: string | null
   icon: string | null
   color: string | null
+  parent_id: string | null
+  sort_order: number | null
   created_at: string
   updated_at: string
 }
@@ -41,6 +43,11 @@ export interface Article {
   og_image_url?: string | null
   seo_keywords?: string[] | string | null
   image_alt_text?: string | null
+  image_prompt?: string | null
+  content_cluster?: string | null
+  pillar_topic?: string | null
+  internal_link_targets?: InternalLinkTarget[] | string | null
+  ai_structure_mode?: string | null
   published_at: string | null
   created_by: string | null
   created_at: string
@@ -92,16 +99,35 @@ export interface GenerateArticleRequest {
   keywords?: string
 }
 
+export interface InternalLinkTarget {
+  title: string
+  slug: string
+  anchor: string
+  reason?: string
+}
+
 export interface GeneratedArticleDraft {
   title: string
   slug: string
+  article?: string
   meta_title: string
   meta_description: string
   excerpt: string
   content: string
+  image_prompt?: string
+  category?: string
+  subcategory?: string
+  includeChecklist?: boolean
+  includeFAQ?: boolean
   key_takeaways: string[]
   checklist_items: string[]
   faq_items: Array<{ question: string; answer: string }>
   suggested_topic: string
   keyword_suggestions: string[]
+  content_cluster?: string
+  pillar_topic?: string
+  internal_links?: InternalLinkTarget[]
+  internal_link_targets?: InternalLinkTarget[]
+  ai_structure_mode?: string
 }
+

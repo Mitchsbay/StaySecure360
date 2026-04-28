@@ -41,7 +41,7 @@ export default async function ArticlePage({ params }: Props) {
   const [faqs, checklistItems, relatedArticles] = await Promise.all([
     getFaqsByArticle(article.id),
     getChecklistByArticle(article.id),
-    getRelatedArticles(article.id, article.topic_id),
+    getRelatedArticles(article.id, article.topic_id, 3, article.internal_link_targets),
   ])
 
   const breadcrumbs = [

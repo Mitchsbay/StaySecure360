@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS public.topics (
   description TEXT,
   icon        TEXT,                -- optional icon name (lucide-react)
   color       TEXT,                -- optional hex colour for card
+  parent_id   UUID REFERENCES public.topics(id) ON DELETE SET NULL,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -72,6 +74,13 @@ CREATE TABLE IF NOT EXISTS public.articles (
   youtube_video_id  TEXT,
   meta_title        TEXT,
   meta_description  TEXT,
+  image_prompt      TEXT,
+  image_alt_text    TEXT,
+  seo_keywords      TEXT[] DEFAULT ARRAY[]::TEXT[],
+  content_cluster   TEXT,
+  pillar_topic      TEXT,
+  internal_link_targets JSONB DEFAULT '[]'::JSONB,
+  ai_structure_mode TEXT,
   published_at      TIMESTAMPTZ,
   created_by        UUID REFERENCES auth.users(id) ON DELETE SET NULL,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -110,7 +119,11 @@ CREATE INDEX IF NOT EXISTS idx_articles_slug       ON public.articles(slug);
 CREATE INDEX IF NOT EXISTS idx_articles_status     ON public.articles(status);
 CREATE INDEX IF NOT EXISTS idx_articles_topic_id   ON public.articles(topic_id);
 CREATE INDEX IF NOT EXISTS idx_articles_published_at ON public.articles(published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_articles_content_cluster ON public.articles(content_cluster);
+CREATE INDEX IF NOT EXISTS idx_articles_seo_keywords ON public.articles USING GIN (seo_keywords);
+CREATE INDEX IF NOT EXISTS idx_articles_internal_link_targets ON public.articles USING GIN (internal_link_targets);
 CREATE INDEX IF NOT EXISTS idx_topics_slug         ON public.topics(slug);
+CREATE INDEX IF NOT EXISTS idx_topics_parent_id    ON public.topics(parent_id);
 CREATE INDEX IF NOT EXISTS idx_faqs_article_id     ON public.faqs(article_id);
 CREATE INDEX IF NOT EXISTS idx_checklist_article_id ON public.checklist_items(article_id);
 

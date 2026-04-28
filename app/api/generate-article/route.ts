@@ -1,35 +1,320 @@
 // ============================================================
-// /api/generate-article — Server-side OpenAI article + image generation
+// /api/generate-article — Server-side OpenAI article generation
 //
 // REQUIRED ENVIRONMENT VARIABLES (set in Vercel or .env.local):
 //   OPENAI_API_KEY              — Your OpenAI API key (server-side only)
 //   NEXT_PUBLIC_SUPABASE_URL
 //   NEXT_PUBLIC_SUPABASE_ANON_KEY
-//   SUPABASE_SERVICE_ROLE_KEY   — For uploading images to Supabase Storage
-//
-// OPTIONAL:
-//   GENERATE_IMAGES=false       — Set to "false" to disable image generation globally
+//   SUPABASE_SERVICE_ROLE_KEY
 //
 // HOW IT WORKS:
-//   The client calls this endpoint ONCE for text generation (fast, ~5-10s).
-//   If the user requested an image, the client makes a SECOND call to
-//   /api/generate-image with the image_prompt from the first response.
-//   This split prevents mobile connections from timing out on a single
-//   long-running request that combines GPT + DALL-E (can take 30-60s).
-//
-// This route is protected by Supabase session auth.
-// The OPENAI_API_KEY is NEVER exposed to the client.
+//   The client calls this endpoint once for article text + CMS metadata.
+//   If the user requested an image, the client makes a second call to
+//   /api/generate-image using the image_prompt returned here.
 // ============================================================
 export const dynamic = 'force-dynamic'
-// Vercel Hobby: 60s max. Pro/Business: 300s max.
-// Set to 60s — text generation alone is well within this limit.
 export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { generateSlug } from '@/lib/utils'
-import type { GenerateArticleRequest, GeneratedArticleDraft } from '@/types'
+import type { GenerateArticleRequest, GeneratedArticleDraft, InternalLinkTarget } from '@/types'
+
+type StructureMode =
+  | 'article_only'
+  | 'article_with_short_checklist'
+  | 'article_with_short_faq'
+  | 'article_with_checklist_and_faq'
+
+const structureModes: StructureMode[] = [
+  'article_only',
+  'article_with_short_checklist',
+  'article_with_short_faq',
+  'article_with_checklist_and_faq',
+]
+
+const contentClusterMap: Record<string, { pillar: string; cluster: string }> = {
+  'Physical Security': { pillar: 'Physical Security', cluster: 'physical-security-practice' },
+  'Access Control': { pillar: 'Physical Security', cluster: 'access-control-failures' },
+  'Surveillance Systems': { pillar: 'Physical Security', cluster: 'cctv-real-world-use' },
+  'Workplace Awareness': { pillar: 'Workplace Awareness', cluster: 'human-behaviour-risk' },
+  'Human Behaviour': { pillar: 'Workplace Awareness', cluster: 'predictability-and-routine' },
+  'Security Culture': { pillar: 'Workplace Awareness', cluster: 'security-culture-drift' },
+  'Digital Threats': { pillar: 'Digital Threats', cluster: 'digital-risk-basics' },
+  'Network Security': { pillar: 'Digital Threats', cluster: 'remote-work-network-risk' },
+  'Social Engineering': { pillar: 'Social Engineering', cluster: 'social-engineering-patterns' },
+  'Phishing & Deception': { pillar: 'Social Engineering', cluster: 'phishing-human-factors' },
+  'Physical Social Engineering': { pillar: 'Social Engineering', cluster: 'physical-social-engineering' },
+  'Incident Response': { pillar: 'Incident Response', cluster: 'incident-response-reality' },
+  'Risk Management': { pillar: 'Risk Management', cluster: 'risk-perception' },
+}
+
+const toneModes = [
+  'neutral operator',
+  'direct but measured',
+  'client-facing advisory',
+  'blunt practical warning',
+  'reflective practitioner',
+]
+
+const stableHash = (input: string) =>
+  Array.from(input).reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) >>> 0, 7)
+
+
+const normaliseClusterText = (input?: string | null) =>
+  input
+    ?.toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'general-security'
+
+const resolveCluster = (category?: string | null, subcategory?: string | null, prompt?: string | null) => {
+  const mapped = (subcategory && contentClusterMap[subcategory]) || (category && contentClusterMap[category])
+  if (mapped) return mapped
+
+  const fallback = category || subcategory || prompt || 'General Security'
+  return {
+    pillar: category || 'Security Awareness',
+    cluster: normaliseClusterText(fallback),
+  }
+}
+
+const parseInternalLinks = (value: unknown): InternalLinkTarget[] => {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((link): link is InternalLinkTarget =>
+      Boolean(link && typeof link === 'object' && 'slug' in link && 'title' in link && 'anchor' in link)
+    )
+    .map((link) => ({
+      title: String(link.title).slice(0, 120),
+      slug: String(link.slug).replace(/^\/+|\/+$/g, ''),
+      anchor: String(link.anchor).slice(0, 80),
+      reason: link.reason ? String(link.reason).slice(0, 180) : undefined,
+    }))
+    .filter((link) => link.slug && link.title && link.anchor)
+    .slice(0, 4)
+}
+
+const buildSystemPrompt = (structureMode: StructureMode) => `You are writing for StaySecure360 as a seasoned security operator and risk professional with real-world experience in physical security, workplace risk, home security, digital security, human behaviour, and organisational failure.
+
+You are not writing as an AI assistant.
+You are not writing as a blogger.
+You are not writing as a marketer.
+
+You are writing as someone who has seen how security fails in ordinary environments: homes, offices, public spaces, building operations, access points, daily routines, staff shortcuts, and organisations assuming a control is working because it exists on paper.
+
+CORE WRITING INSTRUCTION:
+
+Write a practical, authoritative article on the user supplied topic.
+
+The article should feel like it was written by a real practitioner thinking through the issue, not by a content system filling a template.
+
+The reader should feel that the writer has a point of view.
+
+VOICE:
+
+Use a grounded, direct, practitioner-style voice.
+
+The tone should be:
+- professional but not corporate
+- direct but not theatrical
+- experienced but not arrogant
+- slightly opinionated where justified
+- practical rather than academic
+
+HUMAN WRITING RULES:
+
+Do:
+- Vary sentence length naturally
+- Use some sentence fragments where they feel natural
+- Allow slight roughness in transitions
+- Let some paragraphs end without neatly summarising
+- Occasionally repeat an idea in a different way if it feels natural
+- Include practical observations that feel grounded in real environments
+- Use plain language where possible
+- Challenge weak assumptions or common bad advice
+- Let the article move like a person working through the issue, not like a perfect template
+
+Do not:
+- Do not use a rigid blog structure
+- Do not use numbered "Scenario 1 / Scenario 2" sections
+- Do not use "Case Study" labels unless the user specifically asks for formal case studies
+- Do not over-explain obvious points
+- Do not sound like a textbook
+- Do not sound like a corporate safety brochure
+- Do not make every paragraph perfectly balanced
+- Do not make every transition smooth
+- Do not use polished slogan-style lines
+- Do not write like you are trying to impress the reader
+- Do not overuse rhetorical phrases like "the truth is" or "here's the thing"
+- Do not overuse em dashes, semicolons, three-part patterns, or neatly mirrored sentences
+
+BANNED PHRASES:
+
+Do not use:
+- "In today's world"
+- "It is important to note"
+- "In conclusion"
+- "According to experts"
+- "Organisations must ensure"
+- "Now more than ever"
+- "A comprehensive approach"
+- "This article explores"
+- "Delve into"
+- "Robust security posture"
+- "Peace of mind"
+- "The key takeaway"
+- "When it comes to"
+- "Security is everyone’s responsibility"
+
+ANECDOTE AND EXAMPLE RULES:
+
+Use examples carefully.
+
+Do not invent highly specific factual incidents, street names, dates, companies, suburbs, case numbers, police outcomes, exact dollar losses, or named people unless provided by the user.
+
+Instead, use realistic composite examples based on common security patterns.
+
+Avoid overused examples unless you add a specific practical angle.
+
+Avoid defaulting to:
+- spare key under the mat
+- holiday photos on social media
+- generic doorbell camera advice
+- "nice suburban house"
+- "family went away on vacation"
+- "someone clicked a phishing email" without a more useful operational detail
+
+If using a scenario, weave it naturally into the article rather than introducing it as a case study.
+
+STRUCTURE RULES:
+
+Do not output metadata inside the public article body.
+
+The visible article body must include only what a reader should see on the website.
+
+The visible article can include:
+- article body
+- a practical closing section only if it fits naturally
+- a checklist only when useful
+- a FAQ only when useful
+
+A checklist or FAQ is optional.
+Do not always include both a checklist and FAQ.
+Vary the article structure naturally.
+
+Current structure mode for this generation: ${structureMode}
+
+Interpret that mode as follows:
+- article_only: do not include a checklist or FAQ inside the article body
+- article_with_short_checklist: include a short practical checklist, but no FAQ
+- article_with_short_faq: include a short FAQ, but no checklist
+- article_with_checklist_and_faq: include both, but keep them short and useful
+
+If a checklist is included:
+- Keep it practical
+- Do not make it overly polished
+- Do not make every bullet the same length
+- Use everyday wording
+
+If a FAQ is included:
+- Keep it short
+- Use only genuinely useful questions
+- Do not include filler questions
+
+CONTENT DEPTH:
+
+The article should explain:
+- what usually goes wrong
+- why people miss the risk
+- how ordinary behaviour creates exposure
+- what practical steps reduce that exposure
+- where technology helps
+- where technology creates false confidence
+
+Do not just give tips.
+Explain the failure pattern behind the tips.
+
+STYLE IMPERFECTION LAYER:
+
+Write with natural readability, not grammatical perfection.
+
+Use occasional:
+- shorter abrupt sentences
+- uneven paragraph lengths
+- direct statements
+- mild repetition
+- conversational turns
+
+But do not add fake typos.
+Do not make the writing look careless.
+
+SEO AND OUTPUT RULES:
+
+Return ONLY valid JSON with exactly these keys:
+{
+  "title": "string",
+  "article": "string",
+  "content": "string",
+  "excerpt": "string",
+  "slug": "string",
+  "meta_title": "string",
+  "meta_description": "string",
+  "image_prompt": "string",
+  "category": "string",
+  "subcategory": "string",
+  "includeChecklist": true,
+  "includeFAQ": false,
+  "key_takeaways": ["string", "string", "string"],
+  "checklist_items": ["string", "string", "string"],
+  "faq_items": [
+    {"question": "string", "answer": "string"}
+  ],
+  "suggested_topic": "string",
+  "keyword_suggestions": ["string", "string", "string", "string", "string"],
+  "content_cluster": "string",
+  "pillar_topic": "string",
+  "internal_links": [
+    {"title": "Existing related article title", "slug": "existing-related-article-slug", "anchor": "natural anchor text", "reason": "why this should be linked"}
+  ],
+  "ai_structure_mode": "string"
+}
+
+The article and content fields must contain the same visible article body in Markdown.
+
+The excerpt, slug, meta_title, meta_description, image_prompt, category, subcategory, includeChecklist, includeFAQ, key_takeaways, checklist_items, faq_items, suggested_topic, keyword_suggestions, content_cluster, pillar_topic, internal_links, and ai_structure_mode fields are for the CMS only and must not be repeated as labelled metadata inside the article/content body.
+
+Do not place "Excerpt", "Slug", "Image Prompt", "Meta Title", "Meta Description", "Keyword Suggestions", "Category", or "Subcategory" headings inside the article/content field.
+
+Slug must be URL-safe.
+Meta title should be under 60 characters.
+Meta description should be under 160 characters.
+Excerpt should be under 160 characters.
+
+IMAGE PROMPT RULE:
+
+The image prompt should describe a realistic, cinematic, security-related image.
+No text in image.
+No logos.
+No exaggerated crime scene.
+No dramatic masked burglar unless the topic specifically requires it.
+No cartoon style.
+No obvious stock-photo feel.
+Keep it grounded and believable.
+
+CONTENT ENGINE RULES:
+
+Use the supplied existing-article candidates only for internal_links. Do not invent slugs. If no existing article is a genuinely good fit, return an empty internal_links array.
+
+Choose a content_cluster that is short, lowercase, and hyphenated. It should group related articles into an SEO silo, for example: access-control-failures, cctv-real-world-use, phishing-human-factors, physical-social-engineering, security-culture-drift.
+
+Choose a pillar_topic that describes the larger authority hub, for example Physical Security, Workplace Awareness, Digital Threats, Social Engineering, Incident Response, or Risk Management.
+
+Internal links should feel editorial, not forced. Prefer 1-3 high-relevance links over a long list.
+
+Set ai_structure_mode to the current structure mode.`
 
 export async function POST(request: NextRequest) {
   const openai = new OpenAI({
@@ -69,52 +354,58 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
   }
 
-  // ── Build system prompt ──────────────────────────────────────
-  const systemPrompt = `You are an expert security education writer for StaySecure360, a platform covering both digital and physical security threats.
+  const hashInput = `${prompt}|${audience ?? ''}|${tone ?? ''}|${topic ?? ''}|${keywords ?? ''}`
+  const hash = stableHash(hashInput)
+  const structureMode = structureModes[hash % structureModes.length]
+  const fallbackToneMode = toneModes[Math.floor(hash / 7) % toneModes.length]
+  const appliedTone = tone?.trim() || fallbackToneMode
+  const requestedCluster = resolveCluster(topic, undefined, prompt)
 
-Your writing style is:
-- Professional, clear, and accessible to non-technical readers
-- Practical and actionable — focused on real-world scenarios
-- Educational without being alarmist
-- Well-structured with clear headings
+  const { data: existingArticles } = await adminClient
+    .from('articles')
+    .select('title, slug, excerpt, content_cluster, pillar_topic')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false })
+    .limit(18)
 
-You must return a JSON object with EXACTLY this structure:
-{
-  "title": "string — compelling article title",
-  "slug": "string — URL-safe slug",
-  "meta_title": "string — SEO title under 60 chars",
-  "meta_description": "string — SEO description under 160 chars",
-  "excerpt": "string — 2-3 sentence summary",
-  "content": "string — full article body in Markdown (800-1200 words, use ## and ### headings, **bold** for key terms)",
-  "image_prompt": "string — a concise DALL-E image generation prompt for a professional hero image that represents this article topic. Style: clean flat illustration, corporate/professional, no text, no people's faces, security theme. Example: 'A clean flat illustration of a padlock on a digital network grid, blue and white colour palette, corporate style, no text'",
-  "key_takeaways": ["string", "string", "string"],
-  "checklist_items": ["string", "string", "string", "string", "string"],
-  "faq_items": [
-    {"question": "string", "answer": "string"},
-    {"question": "string", "answer": "string"},
-    {"question": "string", "answer": "string"}
-  ],
-  "suggested_topic": "string — one of: Social Engineering, Physical Security, Digital Threats, Remote Work Security, Workplace Awareness",
-  "keyword_suggestions": ["string", "string", "string", "string", "string"]
-}
+  const linkCandidates = (existingArticles ?? [])
+    .map((article) => ({
+      title: article.title,
+      slug: article.slug,
+      excerpt: article.excerpt,
+      content_cluster: article.content_cluster,
+      pillar_topic: article.pillar_topic,
+    }))
+    .filter((article) => article.title && article.slug)
 
-Return ONLY valid JSON. No markdown code blocks. No extra text.`
+  const systemPrompt = buildSystemPrompt(structureMode)
 
   const userPrompt = [
-    `Write a security education article about: ${prompt}`,
-    audience ? `Target audience: ${audience}` : '',
-    tone ? `Tone: ${tone}` : '',
-    topic ? `Security category: ${topic}` : '',
-    keywords ? `Target keywords: ${keywords}` : '',
+    `TOPIC: ${prompt}`,
+    audience ? `TARGET AUDIENCE: ${audience}` : '',
+    `TONE MODE: ${appliedTone}`,
+    topic ? `CATEGORY: ${topic}` : '',
+    `RECOMMENDED PILLAR TOPIC: ${requestedCluster.pillar}`,
+    `RECOMMENDED CONTENT CLUSTER: ${requestedCluster.cluster}`,
+    keywords ? `TARGET KEYWORDS: ${keywords}` : '',
+    linkCandidates.length ? `EXISTING ARTICLE CANDIDATES FOR INTERNAL LINKS (use only these slugs if relevant): ${JSON.stringify(linkCandidates)}` : 'EXISTING ARTICLE CANDIDATES FOR INTERNAL LINKS: []',
+    `STRUCTURE MODE: ${structureMode}`,
+    'Write the article now. Keep CMS metadata separate from the visible article/content body.',
   ]
     .filter(Boolean)
     .join('\n')
 
-  // ── Step 1: Generate article text only ───────────────────────
-  // Image generation is now handled by a separate /api/generate-image call
-  // from the client. This keeps this endpoint fast and within timeout limits
-  // on mobile connections and Vercel Hobby tier.
-  let draft: GeneratedArticleDraft & { image_prompt?: string }
+  let draft: (GeneratedArticleDraft & {
+    article?: string
+    image_prompt?: string
+    category?: string
+    subcategory?: string
+    includeChecklist?: boolean
+    includeFAQ?: boolean
+    internal_links?: InternalLinkTarget[]
+    internal_link_targets?: InternalLinkTarget[]
+  })
+
   try {
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -122,8 +413,8 @@ Return ONLY valid JSON. No markdown code blocks. No extra text.`
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.7,
-      max_tokens: 3000,
+      temperature: 0.92,
+      max_tokens: 4000,
       response_format: { type: 'json_object' },
     })
 
@@ -138,8 +429,40 @@ Return ONLY valid JSON. No markdown code blocks. No extra text.`
       return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
     }
 
+    draft.content = draft.content || draft.article || ''
+    draft.article = draft.article || draft.content
+
     if (!draft.slug) {
       draft.slug = generateSlug(draft.title)
+    }
+
+    if (!draft.meta_title) {
+      draft.meta_title = draft.title?.slice(0, 60) ?? ''
+    }
+
+    if (!draft.excerpt && draft.content) {
+      draft.excerpt = draft.content.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
+    }
+
+    if (!draft.meta_description) {
+      draft.meta_description = draft.excerpt?.slice(0, 160) ?? ''
+    }
+
+    const clusterFromDraft = resolveCluster(draft.category || topic, draft.subcategory, prompt)
+    draft.content_cluster = normaliseClusterText(draft.content_cluster || clusterFromDraft.cluster)
+    draft.pillar_topic = draft.pillar_topic || clusterFromDraft.pillar
+    draft.ai_structure_mode = structureMode
+    const parsedLinks = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
+    draft.internal_links = parsedLinks
+    draft.internal_link_targets = parsedLinks
+
+    if (Array.isArray(draft.keyword_suggestions)) {
+      draft.keyword_suggestions = draft.keyword_suggestions
+        .map((keyword) => String(keyword).trim())
+        .filter(Boolean)
+        .slice(0, 8)
+    } else {
+      draft.keyword_suggestions = []
     }
   } catch (err: unknown) {
     console.error('OpenAI text generation error:', err)
@@ -147,6 +470,5 @@ Return ONLY valid JSON. No markdown code blocks. No extra text.`
     return NextResponse.json({ error: message }, { status: 500 })
   }
 
-  // Return draft only — image is generated separately via /api/generate-image
   return NextResponse.json({ draft }, { status: 200 })
 }

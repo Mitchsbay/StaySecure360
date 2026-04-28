@@ -11,14 +11,14 @@ export default function AdminTopicsPage() {
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showNew, setShowNew] = useState(false)
-  const [form, setForm] = useState({ name: '', slug: '', description: '', icon: '', color: '' })
+  const [form, setForm] = useState({ name: '', slug: '', description: '', icon: '', color: '', parent_id: '', sort_order: 0 })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const supabase = createClient()
 
   const loadTopics = useCallback(async () => {
-    const { data } = await supabase.from('topics').select('*').order('name')
+    const { data } = await supabase.from('topics').select('*').order('sort_order', { ascending: true }).order('name')
     setTopics(data ?? [])
     setLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -26,12 +26,17 @@ export default function AdminTopicsPage() {
 
   useEffect(() => { loadTopics() }, [loadTopics])
 
-  const resetForm = () => setForm({ name: '', slug: '', description: '', icon: '', color: '' })
+  const resetForm = () => setForm({ name: '', slug: '', description: '', icon: '', color: '', parent_id: '', sort_order: 0 })
 
   const handleSave = async () => {
     setSaving(true)
     setError(null)
-    const payload = { ...form, slug: form.slug || generateSlug(form.name) }
+    const payload = {
+      ...form,
+      slug: form.slug || generateSlug(form.name),
+      parent_id: form.parent_id || null,
+      sort_order: Number(form.sort_order) || 0,
+    }
 
     let result
     if (editingId) {
@@ -60,6 +65,8 @@ export default function AdminTopicsPage() {
       description: topic.description ?? '',
       icon: topic.icon ?? '',
       color: topic.color ?? '',
+      parent_id: topic.parent_id ?? '',
+      sort_order: topic.sort_order ?? 0,
     })
   }
 
@@ -101,6 +108,25 @@ export default function AdminTopicsPage() {
         onChange={(e) => setForm((p) => ({ ...p, color: e.target.value }))}
         className="h-10 w-full border border-gray-300 rounded-lg cursor-pointer"
         title="Topic colour"
+      />
+      <select
+        value={form.parent_id}
+        onChange={(e) => setForm((p) => ({ ...p, parent_id: e.target.value }))}
+        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+      >
+        <option value="">Top-level topic</option>
+        {topics
+          .filter((topic) => topic.id !== editingId && !topic.parent_id)
+          .map((topic) => (
+            <option key={topic.id} value={topic.id}>{topic.name}</option>
+          ))}
+      </select>
+      <input
+        type="number"
+        value={form.sort_order}
+        onChange={(e) => setForm((p) => ({ ...p, sort_order: Number(e.target.value) }))}
+        placeholder="Sort order"
+        className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
       />
       {error && <p className="text-red-600 text-sm md:col-span-2">{error}</p>}
       <div className="flex gap-2 md:col-span-2">
@@ -158,8 +184,8 @@ export default function AdminTopicsPage() {
                       style={{ backgroundColor: topic.color ?? '#3b82f6' }}
                     />
                     <div>
-                      <p className="font-medium text-gray-900">{topic.name}</p>
-                      <p className="text-xs text-gray-400 font-mono">{topic.slug}</p>
+                      <p className="font-medium text-gray-900">{topic.parent_id ? '↳ ' : ''}{topic.name}</p>
+                      <p className="text-xs text-gray-400 font-mono">{topic.slug}{topic.parent_id ? ' · child topic' : ''}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

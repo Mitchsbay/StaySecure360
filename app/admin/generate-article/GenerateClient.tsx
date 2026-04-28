@@ -134,6 +134,12 @@ export default function GenerateArticlePage() {
         meta_title: draft.meta_title,
         meta_description: draft.meta_description,
         featured_image_url: featuredImageUrl ?? null,
+        image_prompt: draft.image_prompt ?? imagePromptFromDraft ?? null,
+        seo_keywords: draft.keyword_suggestions ?? [],
+        content_cluster: draft.content_cluster ?? null,
+        pillar_topic: draft.pillar_topic ?? null,
+        internal_link_targets: draft.internal_link_targets ?? draft.internal_links ?? [],
+        ai_structure_mode: draft.ai_structure_mode ?? null,
         status: 'draft',
         created_by: user?.id,
       })
@@ -145,6 +151,29 @@ export default function GenerateArticlePage() {
     if (saveErr) {
       setSaveError(saveErr.message)
       return
+    }
+
+    const checklistItems = draft.checklist_items ?? []
+    if (checklistItems.length > 0) {
+      await supabase.from('checklist_items').insert(
+        checklistItems.map((item, index) => ({
+          article_id: data.id,
+          item,
+          sort_order: index,
+        }))
+      )
+    }
+
+    const faqItems = draft.faq_items ?? []
+    if (faqItems.length > 0) {
+      await supabase.from('faqs').insert(
+        faqItems.map((faq, index) => ({
+          article_id: data.id,
+          question: faq.question,
+          answer: faq.answer,
+          sort_order: index,
+        }))
+      )
     }
 
     setSaveSuccess(true)
@@ -165,7 +194,7 @@ export default function GenerateArticlePage() {
           AI Article Generator
         </h1>
         <p className="text-gray-500 mt-1 text-sm sm:text-base">
-          Generate a structured article draft using AI. Review and edit before publishing.
+          Generate a humanised StaySecure360 article draft using your operator-style writing guardrails.
         </p>
       </div>
 
@@ -185,7 +214,7 @@ export default function GenerateArticlePage() {
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={4}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900 resize-none text-base"
-                  placeholder="e.g. Write an article about how attackers use USB drop attacks in office environments and how to prevent them."
+                  placeholder="e.g. Home security mistakes that make a property an easy target for opportunistic burglars."
                 />
               </div>
 
@@ -208,11 +237,11 @@ export default function GenerateArticlePage() {
                     onChange={(e) => setTone(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                   >
-                    <option value="">Default</option>
-                    <option value="educational">Educational</option>
-                    <option value="professional">Professional</option>
-                    <option value="conversational">Conversational</option>
-                    <option value="urgent">Urgent / Warning</option>
+                    <option value="">Default Operator Voice</option>
+                    <option value="neutral operator">Neutral Operator</option>
+                    <option value="direct and blunt">Direct / Blunt</option>
+                    <option value="advisory client-facing">Advisory / Client-Facing</option>
+                    <option value="urgent warning without hype">Urgent / Warning</option>
                   </select>
                 </div>
               </div>
@@ -293,7 +322,7 @@ export default function GenerateArticlePage() {
               {/* Progress hints shown while generating */}
               {generatingText && (
                 <p className="text-center text-xs text-gray-500 animate-pulse">
-                  GPT is writing your article — usually takes 10–20 seconds…
+                  GPT is writing with the StaySecure360 humanised operator prompt — usually takes 10–20 seconds…
                 </p>
               )}
               {generatingImage && (
