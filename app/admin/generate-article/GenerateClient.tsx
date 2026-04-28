@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sparkles, Copy, Save, RefreshCw, Image as ImageIcon, AlertTriangle, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { generateSlug } from '@/lib/utils'
-import type { GeneratedArticleDraft } from '@/types'
+import type { GeneratedArticleDraft, Topic } from '@/types'
 
 export default function GenerateArticlePage() {
   const router = useRouter()
@@ -14,9 +14,31 @@ export default function GenerateArticlePage() {
   const [prompt, setPrompt] = useState('')
   const [audience, setAudience] = useState('')
   const [tone, setTone] = useState('')
-  const [topic, setTopic] = useState('')
+  const [topicId, setTopicId] = useState('')
+  const [topics, setTopics] = useState<Topic[]>([])
   const [keywords, setKeywords] = useState('')
   const [generateImage, setGenerateImage] = useState(true)
+
+  useEffect(() => {
+    let active = true
+
+    const loadTopics = async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from('topics')
+        .select('id, name, slug, description, icon, color, parent_id, sort_order, created_at, updated_at')
+        .order('sort_order', { ascending: true })
+        .order('name', { ascending: true })
+
+      if (active) setTopics((data ?? []) as Topic[])
+    }
+
+    loadTopics()
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   // ── Generation state ─────────────────────────────────────────
   const [generatingText, setGeneratingText] = useState(false)
@@ -32,6 +54,29 @@ export default function GenerateArticlePage() {
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+
+  const parentTopics = topics.filter((topic) => !topic.parent_id)
+  const childTopicsByParent = parentTopics.map((parent) => ({
+    parent,
+    children: topics.filter((topic) =>
+      topic.parent_id === parent.id &&
+      topic.id !== parent.id &&
+      topic.slug !== parent.slug &&
+      topic.name !== parent.name
+    ),
+  }))
+  const orphanedChildTopics = topics.filter((topic) =>
+    topic.parent_id && !topics.some((parent) => parent.id === topic.parent_id)
+  )
+  const selectedTopic = topics.find((item) => item.id === topicId)
+  const selectedParentTopic = selectedTopic?.parent_id
+    ? topics.find((item) => item.id === selectedTopic.parent_id)
+    : null
+  const topicGuidance = selectedTopic
+    ? selectedParentTopic
+      ? selectedParentTopic.name + ' > ' + selectedTopic.name
+      : selectedTopic.name
+    : ''
 
   // ── Step 1: Generate article text ───────────────────────────
   // Fast (~5-15s). Returns the draft + an image_prompt for Step 2.
@@ -51,7 +96,7 @@ export default function GenerateArticlePage() {
       const res = await fetch('/api/generate-article', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, audience, tone, topic, keywords }),
+        body: JSON.stringify({ prompt, audience, tone, topic: topicGuidance, topic_id: topicId || null, keywords }),
       })
 
       if (!res.ok) {
@@ -249,14 +294,38 @@ export default function GenerateArticlePage() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">
-                  Security Topic Category
+                  Security Topic / Subcategory
                 </label>
-                <input
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
+                <select
+                  value={topicId}
+                  onChange={(e) => setTopicId(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="e.g. Physical Security"
-                />
+                >
+                  <option value="">Auto-select best topic</option>
+                  {childTopicsByParent.map(({ parent, children }) => (
+                    children.length > 0 ? (
+                      <optgroup key={parent.id} label={parent.name}>
+                        {children.map((child) => (
+                          <option key={child.id} value={child.id}>
+                            {child.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : (
+                      <option key={parent.id} value={parent.id}>
+                        {parent.name}
+                      </option>
+                    )
+                  ))}
+                  {orphanedChildTopics.map((topic) => (
+                    <option key={topic.id} value={topic.id}>
+                      {topic.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Leave on auto and the AI will classify the article from your live topic bank.
+                </p>
               </div>
 
               <div>

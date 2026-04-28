@@ -52,7 +52,12 @@ export default function ArticleForm({ article, topics, mode }: ArticleFormProps)
   const parentTopics = topics.filter((topic) => !topic.parent_id)
   const childTopicsByParent = parentTopics.map((parent) => ({
     parent,
-    children: topics.filter((topic) => topic.parent_id === parent.id),
+    children: topics.filter((topic) =>
+      topic.parent_id === parent.id &&
+      topic.id !== parent.id &&
+      topic.slug !== parent.slug &&
+      topic.name !== parent.name
+    ),
   }))
   const ungroupedTopics = topics.filter((topic) =>
     topic.parent_id && !topics.some((parent) => parent.id === topic.parent_id)
