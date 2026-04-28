@@ -387,6 +387,22 @@ Choose a pillar_topic that describes the larger authority hub, for example Physi
 
 Internal links should feel editorial, not forced. Prefer 1-3 high-relevance links over a long list.
 
+AUTOMATIC INTERNAL LINK INJECTION RULES:
+
+You must handle internal linking automatically. The user should not need to ask for links in the prompt.
+
+When relevant existing article candidates are supplied:
+- Choose 1-3 of the most relevant candidates only.
+- For every item you include in internal_links, the article/content body must also contain a natural Markdown link to that article.
+- Use this exact link format: [natural anchor text](/articles/existing-article-slug)
+- Place links inside ordinary paragraphs where they genuinely support the point being made.
+- Do not output a separate "Related Articles", "Further Reading", or "Internal Links" section inside the article body.
+- Do not group links together.
+- Do not use generic anchor text such as "click here", "read more", or the full article title unless it sounds natural.
+- If no candidate fits naturally, return internal_links as [] and do not force a link.
+
+The visible article should read as a normal article. The internal links should be nearly invisible editorial support, not SEO stuffing.
+
 Set ai_structure_mode to the current structure mode.`
 
 export async function POST(request: NextRequest) {

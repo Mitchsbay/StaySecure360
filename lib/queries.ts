@@ -72,6 +72,44 @@ export async function getArticleBySlug(slug: string): Promise<Article | null> {
   return data
 }
 
+
+export async function getChildTopics(parentId: string): Promise<Topic[]> {
+  const supabase = createPublicClient()
+  const { data, error } = await supabase
+    .from('topics')
+    .select('*')
+    .eq('parent_id', parentId)
+    .order('sort_order', { ascending: true })
+    .order('name', { ascending: true })
+
+  if (error) return []
+  return data ?? []
+}
+
+export async function getArticlesByTopicTree(topicId: string, limit?: number): Promise<Article[]> {
+  const supabase = createPublicClient()
+
+  const { data: childTopics } = await supabase
+    .from('topics')
+    .select('id')
+    .eq('parent_id', topicId)
+
+  const topicIds = [topicId, ...((childTopics ?? []).map((topic) => topic.id))]
+
+  let query = supabase
+    .from('articles')
+    .select('*, topic:topics(*)')
+    .eq('status', 'published')
+    .in('topic_id', topicIds)
+    .order('published_at', { ascending: false })
+
+  if (limit) query = query.limit(limit)
+
+  const { data, error } = await query
+  if (error) return []
+  return data ?? []
+}
+
 export async function getArticlesByTopic(topicId: string, limit?: number): Promise<Article[]> {
   const supabase = createPublicClient()
   let query = supabase

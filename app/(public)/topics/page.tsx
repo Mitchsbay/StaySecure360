@@ -8,7 +8,7 @@ export const revalidate = 600
 export const metadata: Metadata = {
   title: 'Security Topics',
   description:
-    'Browse security topics on StaySecure360 — social engineering, physical security, digital threats, remote work, and workplace awareness.',
+    'Browse StaySecure360 security topic hubs — physical security, digital threats, social engineering, remote work security, and workplace awareness.',
 }
 
 export default async function TopicsPage() {
@@ -17,11 +17,24 @@ export default async function TopicsPage() {
     getPublishedArticles(),
   ])
 
-  // Count articles per topic
+  const parentTopics = topics.filter((topic) => !topic.parent_id)
+  const childrenByParent = parentTopics.reduce<Record<string, string[]>>((acc, parent) => {
+    acc[parent.id] = topics
+      .filter((topic) => topic.parent_id === parent.id)
+      .map((topic) => topic.id)
+    return acc
+  }, {})
+
+  // Count direct and child-topic articles so parent cards behave like pillar hubs.
   const countByTopic: Record<string, number> = {}
-  articles.forEach((a) => {
-    if (a.topic_id) {
-      countByTopic[a.topic_id] = (countByTopic[a.topic_id] ?? 0) + 1
+  articles.forEach((article) => {
+    if (!article.topic_id) return
+
+    countByTopic[article.topic_id] = (countByTopic[article.topic_id] ?? 0) + 1
+
+    const parent = parentTopics.find((topic) => childrenByParent[topic.id]?.includes(article.topic_id!))
+    if (parent) {
+      countByTopic[parent.id] = (countByTopic[parent.id] ?? 0) + 1
     }
   })
 
@@ -31,17 +44,16 @@ export default async function TopicsPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-3">Security Topics</h1>
           <p className="text-lg text-gray-600 max-w-2xl">
-            Each topic hub brings together articles, guides, and checklists focused on a specific
-            area of digital and physical security.
+            Browse the main StaySecure360 security hubs. Each hub groups related subtopics and articles into a practical security knowledge base.
           </p>
         </div>
       </section>
 
       <section className="py-12 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {topics.length > 0 ? (
+          {parentTopics.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {topics.map((topic) => (
+              {parentTopics.map((topic) => (
                 <TopicCard
                   key={topic.id}
                   topic={topic}
