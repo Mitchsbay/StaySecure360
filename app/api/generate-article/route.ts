@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { generateSlug } from '@/lib/utils'
+import { validateArticle, generateValidationReport } from '@/lib/article-validation'
 import type { GenerateArticleRequest, GeneratedArticleDraft, InternalLinkTarget } from '@/types'
 
 type StructureMode =
@@ -348,6 +349,13 @@ Do:
 - Challenge weak assumptions or common bad advice
 - Let the article move like a person working through the issue, not like a perfect template
 
+ANTI-STRUCTURE RULE:
+Do NOT use section headings (###, ##, #) to organize your article.
+The article should flow as a continuous narrative where themes emerge naturally, not as a structured outline.
+If you feel the need to add headings, that's a signal the article is too template-like. Rewrite it instead.
+Exception: Only use headings if the structure mode explicitly requires them (e.g., "article_with_checklist_and_faq" might use headings for FAQ items, but even then, keep them minimal and conversational).
+The reader should discover the structure through reading, not through headings.
+
 Do not:
 - Do not use a rigid blog structure
 - Do not use numbered "Scenario 1 / Scenario 2" sections
@@ -441,20 +449,39 @@ Interpret that mode as follows:
 - article_with_short_faq: include a short FAQ, but no checklist
 - article_with_checklist_and_faq: include both, but keep them short and useful
 
-If a checklist is included:
-- Keep it practical
-- Do not make it overly polished
-- Do not make every bullet the same length
-- Use everyday wording
+CHECKLIST FORMATTING RULES (if structure mode requires it):
+If you include a checklist, it MUST be:
+- Written as flowing prose paragraphs, NOT as bullet points
+- Uneven in length (some items 1-2 sentences, others 3-4)
+- Conversational in tone, not instructional
+- Embedded naturally within the article flow, not in a separate section
+DO NOT use:
+- Bolded headers with colons (e.g., "**Check Locks**: Regularly test...")
+- Parallel structure or balanced formatting
+- Numbered lists
+- Separate "Checklist" or "Practical Steps" sections
+INSTEAD, weave items into the narrative:
+"Start with the basics. Test your locks. Actually turn the key. See if it catches. Most people don't. Then think about your cameras—are you actually watching them? Or are they just there, collecting dust?"
+This should read like a practitioner thinking through the issue, not a training guide.
 
 If a FAQ is included:
 - Keep it short
 - Use only genuinely useful questions
 - Do not include filler questions
+- Format questions naturally without excessive formatting
+- Answers should be conversational, not robotic
 
-WORD COUNT RULE:
+CRITICAL WORD COUNT REQUIREMENT:
 
-The article body (the content and article fields) must be a minimum of 1000 words. Do not stop writing before reaching 1000 words. If the article feels complete before 1000 words, expand on the failure patterns, add a real-world scenario, or go deeper on one of the practical points. Do not pad with filler — extend with substance.
+The article body MUST be a minimum of 1200 words. This is non-negotiable.
+If you reach 1000 words and the article feels complete, you MUST continue by:
+- Adding a real-world scenario or case study that illustrates the failure pattern
+- Exploring the psychological or organisational reasons why people miss this risk
+- Discussing where technology helps AND where it creates false confidence
+- Adding practical nuances that only someone with real experience would know
+Do not pad with filler. Every additional word should add substance.
+Count the words in your final article and verify it meets 1200+ before responding.
+If the article is under 1200 words, rewrite it to expand the depth, not the length.
 
 CONTENT DEPTH:
 
@@ -500,17 +527,67 @@ OPENING RULE:
 
 Start with a specific, ordinary real-world moment involving the topic. Do not start with a general statement about why the topic is important.
 
-CHECKLIST OVERRIDE:
+OPENING EXAMPLES:
+❌ BAD (Generic):
+"Home security is a critical concern for many homeowners today. With break-ins on the rise, it's important to ensure your property is properly protected."
 
-Do not include a checklist unless the selected structure mode requires one and it genuinely helps. If included, make it informal and uneven, not a polished training template.
+✅ GOOD (Specific, real-world):
+"It's a quiet evening, and you settle into your armchair, satisfied that your home security system is up to par. You've got the locks, alarms, and maybe even a camera or two. Feels secure, right? But what's the reality?"
+
+The good example:
+- Places the reader in a specific moment
+- Uses sensory details (quiet evening, armchair)
+- Ends with a question that creates tension
+- Doesn't start with abstract importance
+
+CHECKLIST EXAMPLES:
+❌ BAD (Polished, templated):
+- **Check Locks**: Regularly test all your locks and windows to ensure they function properly.
+- **Limit Technology Reliance**: Use security technology as a tool, not a crutch.
+- **Be Cautious**: Be mindful of who you let know your personal information.
+
+✅ GOOD (Informal, woven into narrative):
+"Start with the basics. Test your locks. Actually turn the key. See if it catches. Most people don't. Then think about your cameras—are you actually watching them? Or are they just there? And don't talk about your vacation plans with the wrong people. One misplaced comment can invite unwanted attention."
+
+The good example:
+- Written as prose, not bullet points
+- Conversational tone
+- Uneven length
+- Woven into the narrative flow
+- Feels like practitioner thinking, not training guide
 
 ANTI-POLISH RULE:
 
 Avoid sentences that sound like slogans, neat conclusions, or advice headlines. If a sentence sounds quote-worthy, make it plainer and more casual.
 
+ENDING EXAMPLES:
+❌ BAD (Polished conclusion):
+"In conclusion, home security requires a multi-faceted approach combining technology, human vigilance, and community awareness. By implementing these strategies, you can significantly reduce your risk of break-ins and ensure peace of mind."
+
+✅ GOOD (Natural stopping point):
+"The moment you think your system is complete is the moment it starts to fail. That's when the gaps open up."
+
+The good example:
+- Ends mid-thought, not with a summary
+- Leaves the reader with an observation, not a lesson
+- Feels like the writer stopped, not finished
+- Creates slight tension rather than closure
+
 ENDING RULE:
 
-Do not conclude the article cleanly. End at a natural stopping point, not with a polished takeaway.
+Do NOT end with:
+- A summary or recap
+- A call-to-action
+- A polished takeaway or lesson
+- A neat conclusion that ties everything together
+- A dramatic statement designed to be memorable
+
+Instead, end at a natural stopping point where the thought naturally concludes. This might be:
+- Mid-observation: "That's when most people miss it."
+- A practical detail: "The moment you think your system is complete is the moment it starts to fail."
+- An unresolved tension: "But most people never get there."
+
+The ending should feel like the writer stopped writing, not like they finished writing.
 
 SEO AND OUTPUT RULES:
 
@@ -767,6 +844,17 @@ export async function POST(request: NextRequest) {
     draft.internal_link_targets = parsedLinks
 
     draft = enforceInternalLinkInjection(draft, linkCandidates, prompt)
+
+    // POST-GENERATION VALIDATION
+    // Validate article quality and log issues for monitoring
+    const validation = validateArticle(draft.content || '', 1200)
+    console.log(generateValidationReport(validation))
+    
+    // Log token estimate
+    const estimatedTokens = Math.ceil((systemPrompt.length + userPrompt.length) / 4) + 500
+    if (estimatedTokens > 3000) {
+      console.warn(`[Token Budget] Prompt may exceed limits: ~${estimatedTokens} tokens`)
+    }
 
     if (Array.isArray(draft.keyword_suggestions)) {
       draft.keyword_suggestions = draft.keyword_suggestions
