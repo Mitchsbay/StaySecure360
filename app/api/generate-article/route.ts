@@ -788,3 +788,18 @@ export async function POST(request: NextRequest) {
     return jsonError(getErrorMessage(err), 500, err)
   }
 }
+
+// Handle prefetch requests (GET) by returning a 405 with proper headers
+// This prevents browser prefetch errors from appearing in logs
+export async function GET() {
+  return NextResponse.json(
+    { error: 'Method Not Allowed. Use POST to generate articles.' },
+    { 
+      status: 405,
+      headers: {
+        'Allow': 'POST',
+        'Content-Type': 'application/json',
+      }
+    }
+  )
+}
