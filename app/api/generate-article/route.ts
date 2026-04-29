@@ -13,7 +13,7 @@
 //   /api/generate-image using the image_prompt returned here.
 // ============================================================
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
+export const maxDuration = 180
 
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
@@ -512,17 +512,17 @@ If a FAQ is included:
 - Format questions naturally without excessive formatting
 - Answers should be conversational, not robotic
 
-CRITICAL WORD COUNT REQUIREMENT:
-
-The article body MUST be a minimum of 1200 words. This is non-negotiable.
-If you reach 1000 words and the article feels complete, you MUST continue by:
+	CRITICAL WORD COUNT REQUIREMENT:
+	
+	The article body should aim for a minimum of 1000 words. This is important for depth and SEO.
+	If you reach 800 words and the article feels complete, you MUST continue by:
 - Adding a real-world scenario or case study that illustrates the failure pattern
 - Exploring the psychological or organisational reasons why people miss this risk
 - Discussing where technology helps AND where it creates false confidence
 - Adding practical nuances that only someone with real experience would know
 Do not pad with filler. Every additional word should add substance.
-Count the words in your final article and verify it meets 1200+ before responding.
-If the article is under 1200 words, rewrite it to expand the depth, not the length.
+	Count the words in your final article and verify it meets 1000+ before responding.
+	If the article is under 1000 words, rewrite it to expand the depth, not the length.
 
 CONTENT DEPTH:
 
@@ -832,8 +832,8 @@ export async function POST(request: NextRequest) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.92,
-      max_tokens: 3200,
+      temperature: 0.88, // Slightly lower for faster, more consistent generation
+      max_tokens: 2800, // Sufficient for 1200+ words while reducing latency
       response_format: { type: 'json_object' },
     })
 
@@ -891,7 +891,7 @@ export async function POST(request: NextRequest) {
 
     // POST-GENERATION VALIDATION
     // Validate article quality and log issues for monitoring
-    const validation = validateArticle(draft.content || '', 1200)
+    const validation = validateArticle(draft.content || '', 1000)
     console.log(generateValidationReport(validation))
     
     // Log token estimate
