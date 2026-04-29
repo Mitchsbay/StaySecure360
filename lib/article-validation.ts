@@ -54,6 +54,12 @@ const BANNED_PHRASES = [
   'in many cases',
   'so, what can you do',
   'ultimately',
+  'it\'s a quiet evening',
+  'settle into your armchair',
+  'imagine a scenario',
+  'false sense of security',
+  'culture of awareness',
+  'security doesn\'t just happen',
 ]
 
 /**
@@ -112,6 +118,7 @@ export function detectPolishedConclusion(content: string): boolean {
     /can significantly reduce your risk/,
     /ensure peace of mind/,
     /requires a multi-faceted approach/,
+    /remember, security is/,
   ]
   
   return polishedPatterns.some(pattern => pattern.test(lowerContent))
@@ -127,15 +134,32 @@ export function countSectionHeadings(content: string): number {
 }
 
 /**
+ * Check for AI-like intro hooks
+ */
+export function detectAIIntro(content: string): boolean {
+  if (!content) return false
+  const intro = content.split('\n\n')[0].toLowerCase()
+  const aiIntroPatterns = [
+    /it's a quiet evening/,
+    /imagine a scenario/,
+    /you settle into your armchair/,
+    /in today's world/,
+    /picture this:/,
+  ]
+  return aiIntroPatterns.some(pattern => pattern.test(intro))
+}
+
+/**
  * Validate article against quality criteria
  */
-export function validateArticle(content: string, minWords: number = 1200): ValidationResult {
+export function validateArticle(content: string, minWords: number = 1000): ValidationResult {
   const issues: string[] = []
   const warnings: string[] = []
   
   const wordCount = countWords(content)
   const bannedPhrases = findBannedPhrases(content)
   const hasPolishedConclusion = detectPolishedConclusion(content)
+  const hasAIIntro = detectAIIntro(content)
   const headingCount = countSectionHeadings(content)
   
   // Word count check
@@ -150,20 +174,26 @@ export function validateArticle(content: string, minWords: number = 1200): Valid
   
   // Polished conclusion check
   if (hasPolishedConclusion) {
-    issues.push('Article ends with polished conclusion pattern (sounds AI-generated)')
+    issues.push('Article ends with polished conclusion pattern')
+  }
+
+  // AI Intro check
+  if (hasAIIntro) {
+    issues.push('Article starts with common AI intro hook')
   }
   
   // Section heading check
-  if (headingCount > 2) {
-    warnings.push(`Article has ${headingCount} section headings (prefer narrative flow)`)
+  if (headingCount > 0) {
+    warnings.push(`Article has ${headingCount} section headings (prefer narrative flow with no headings)`)
   }
   
   // Calculate quality score
   let score = 100
   score -= Math.max(0, (minWords - wordCount) / minWords) * 20 // Word count penalty
-  score -= bannedPhrases.length * 2 // Banned phrases penalty
-  score -= hasPolishedConclusion ? 10 : 0 // Polished conclusion penalty
-  score -= Math.max(0, (headingCount - 2) * 3) // Excessive headings penalty
+  score -= bannedPhrases.length * 5 // Banned phrases penalty (increased)
+  score -= hasPolishedConclusion ? 15 : 0 // Polished conclusion penalty (increased)
+  score -= hasAIIntro ? 20 : 0 // AI Intro penalty
+  score -= headingCount * 5 // Excessive headings penalty
   
   score = Math.max(0, Math.min(100, score))
   
