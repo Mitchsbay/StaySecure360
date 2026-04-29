@@ -1,0 +1,15 @@
+# Target modern browsers to reduce bundle size and eliminate legacy polyfills.
+# This ensures that features like Array.prototype.at and Object.fromEntries are natively supported.
+# Chrome 90+, Firefox 89+, Safari 14+ support ES2020 features natively.
+
+defaults
+last 2 versions
+not dead
+> 0.5%
+not IE 11
+not op_mini all
+chrome >= 90
+firefox >= 89
+safari >= 14
+edge >= 90
+node 18
