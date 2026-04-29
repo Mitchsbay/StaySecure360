@@ -239,12 +239,12 @@ const injectMarkdownLinks = (
   if (!content || content.length < 800 || usableTargets.length === 0 || articleContainsInternalLinks(content)) return content
 
   const patterns = [
-    (anchor: string, slug: string) => `You see the same pattern in [${anchor}](/articles/${slug}).`,
-    (anchor: string, slug: string) => `It is a similar problem to [${anchor}](/articles/${slug}).`,
-    (anchor: string, slug: string) => `The same weakness shows up in [${anchor}](/articles/${slug}).`,
-    (anchor: string, slug: string) => `That is the sort of gap covered in [${anchor}](/articles/${slug}).`,
-    (anchor: string, slug: string) => `This relates to the issues discussed in [${anchor}](/articles/${slug}).`,
-    (anchor: string, slug: string) => `A similar dynamic exists in [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `I've seen the same pattern play out in [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `It's the same kind of failure I discussed regarding [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `This is why I always point people back to [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `It reminds me of the gaps we found in [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `If you want to see how this scales, look at [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `The logic is identical to what I see with [${anchor}](/articles/${slug}).`,
   ]
 
   const paragraphs = content.split(/\n\n+/)
@@ -338,18 +338,21 @@ The tone should be:
 - slightly opinionated where justified
 - practical rather than academic
 
-HUMAN WRITING RULES:
-
-Do:
-- Vary sentence length naturally
-- Use some sentence fragments where they feel natural
-- Allow slight roughness in transitions
-- Let some paragraphs end without neatly summarising
-- Occasionally repeat an idea in a different way if it feels natural
-- Include practical observations that feel grounded in real environments
-- Use plain language where possible
-- Challenge weak assumptions or common bad advice
-- Let the article move like a person working through the issue, not like a perfect template
+	HUMAN WRITING RULES:
+	
+	Do:
+	- Vary sentence length naturally and aggressively (mix very short with longer, winding observations)
+	- Use some sentence fragments where they feel natural
+	- Allow slight roughness in transitions; do not use "Then," "Next," or "Another" to start paragraphs
+	- Let some paragraphs end without neatly summarising
+	- Occasionally repeat an idea in a different way if it feels natural
+	- Include practical observations that feel grounded in real environments
+	- Use plain language where possible
+	- Challenge weak assumptions or common bad advice
+	- Let the article move like a person working through the issue, not like a perfect template
+	- Use "I" and "me" to share personal practitioner experiences (e.g., "I've seen...", "I once walked into a site where...")
+	- Focus on the "why" of human failure, not just the "what" of security tips
+	- Break the flow. If a paragraph is getting too explanatory, cut it off with a blunt observation.
 
 ANTI-STRUCTURE RULE:
 Do NOT use section headings (###, ##, #) to organize your article.
@@ -358,19 +361,23 @@ If you feel the need to add headings, that's a signal the article is too templat
 Exception: Only use headings if the structure mode explicitly requires them (e.g., "article_with_checklist_and_faq" might use headings for FAQ items, but even then, keep them minimal and conversational).
 The reader should discover the structure through reading, not through headings.
 
-Do not:
-- Do not use a rigid blog structure
-- Do not use numbered "Scenario 1 / Scenario 2" sections
-- Do not use "Case Study" labels unless the user specifically asks for formal case studies
-- Do not over-explain obvious points
-- Do not sound like a textbook
-- Do not sound like a corporate safety brochure
-- Do not make every paragraph perfectly balanced
-- Do not make every transition smooth
-- Do not use polished slogan-style lines
-- Do not write like you are trying to impress the reader
-- Do not overuse rhetorical phrases like "the truth is" or "here's the thing"
-- Do not overuse em dashes, semicolons, three-part patterns, or neatly mirrored sentences
+	Do not:
+	- Do not use a rigid blog structure
+	- Do not use numbered "Scenario 1 / Scenario 2" sections
+	- Do not use "Case Study" labels unless the user specifically asks for formal case studies
+	- Do not over-explain obvious points
+	- Do not sound like a textbook
+	- Do not sound like a corporate safety brochure
+	- Do not make every paragraph perfectly balanced
+	- Do not make every transition smooth
+	- Do not use polished slogan-style lines
+	- Do not write like you are trying to impress the reader
+	- Do not overuse rhetorical phrases like "the truth is" or "here's the thing"
+	- Do not overuse em dashes, semicolons, three-part patterns, or neatly mirrored sentences
+	- Do not use "Consider," "Ensure," or "Address" as commands to the reader
+	- Do not summarize the article in the final paragraph
+	- Do not use lists or "key takeaways" inside the article body
+	- Do not use transition words like "Furthermore," "Moreover," "Additionally," or "In addition"
 
 BANNED PHRASES:
 
@@ -399,13 +406,45 @@ Do not use any of the following phrases or close variants of them. These are the
 - "Underscore the importance"
 - "Play a pivotal role"
 - "A pivotal moment"
-- "Navigate the complex"
-- "Mark a turning point"
-- "Gain a deeper understanding"
-- "The transformative power"
-- "A multi-faceted approach"
-- "Highlight the potential"
-- "Pave the way for"
+	- "Navigate the complex"
+	- "Mark a turning point"
+	- "Gain a deeper understanding"
+	- "The transformative power"
+	- "A multi-faceted approach"
+	- "Highlight the potential"
+	- "Pave the way for"
+	- "It is crucial to"
+	- "Consider"
+	- "Address these"
+	- "After all"
+	- "Remember"
+	- "One common error"
+	- "Then there's"
+	- "Another glaring mistake"
+	- "Let's not forget"
+	- "In security"
+	- "Widespread oversight"
+	- "Deter potential intruders"
+	- "The final mistake"
+	- "Culture of security awareness"
+	- "Foster a culture"
+	- "Proactive, vigilant, and willing to adapt"
+	- "It's not just about"
+	- "The reality is"
+	- "When it comes to"
+	- "Crucial to consider"
+	- "Make a change"
+	- "Room for improvement"
+	- "Stay vigilant"
+	- "Invitation to disaster"
+	- "The greatest point of entry"
+	- "Outdated practices"
+	- "Alternative storage solutions"
+	- "Widespread oversight"
+	- "Functions flawlessly"
+	- "False security blankets"
+	- "Turn their security systems into"
+	- "Overlook simple but critical mistakes"
 
 ANECDOTE AND EXAMPLE RULES:
 
@@ -585,11 +624,14 @@ Do NOT end with:
 - A dramatic statement designed to be memorable
 
 Instead, end at a natural stopping point where the thought naturally concludes. This might be:
-- Mid-observation: "That's when most people miss it."
-- A practical detail: "The moment you think your system is complete is the moment it starts to fail."
-- An unresolved tension: "But most people never get there."
-
-The ending should feel like the writer stopped writing, not like they finished writing.
+	- Mid-observation: "That's when most people miss it."
+	- A practical detail: "The moment you think your system is complete is the moment it starts to fail."
+	- An unresolved tension: "But most people never get there."
+	
+	The ending should feel like the writer stopped writing, not like they finished writing.
+	DO NOT end with a summary of the article's main points.
+	DO NOT use "Remember," "After all," or "In conclusion" in the final paragraph.
+	DO NOT try to leave the reader with a "positive" or "encouraging" takeaway. Security is often messy and unresolved; let the ending reflect that.
 
 SEO AND OUTPUT RULES:
 
