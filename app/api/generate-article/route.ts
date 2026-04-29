@@ -243,6 +243,8 @@ const injectMarkdownLinks = (
     (anchor: string, slug: string) => `It is a similar problem to [${anchor}](/articles/${slug}).`,
     (anchor: string, slug: string) => `The same weakness shows up in [${anchor}](/articles/${slug}).`,
     (anchor: string, slug: string) => `That is the sort of gap covered in [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `This relates to the issues discussed in [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `A similar dynamic exists in [${anchor}](/articles/${slug}).`,
   ]
 
   const paragraphs = content.split(/\n\n+/)

@@ -88,6 +88,8 @@ export function markdownToHtml(text: string): string {
     .replace(/^- (.+)$/gm, '<li>$1</li>')
     // Wrap consecutive list items in <ul> tags
     .replace(/(<li>[\s\S]*?<\/li>(?:\s*<li>[\s\S]*?<\/li>)*)/g, '<ul>$1</ul>')
+    // Convert links markdown to HTML
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
     // Convert paragraph breaks to closing and opening tags
     .replace(/\n\n/g, '</p><p>')
     // Add opening <p> tags to lines that don't start with HTML tags
