@@ -13,7 +13,7 @@
 //   /api/generate-image using the image_prompt returned here.
 // ============================================================
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+export const maxDuration = 60
 
 import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
@@ -364,7 +364,8 @@ Do not:
 
 BANNED PHRASES:
 
-Do not use:
+Do not use any of the following phrases or close variants of them. These are the most commonly flagged AI-generated expressions and will make the article sound machine-written:
+
 - "In today's world"
 - "It is important to note"
 - "In conclusion"
@@ -378,7 +379,23 @@ Do not use:
 - "Peace of mind"
 - "The key takeaway"
 - "When it comes to"
-- "Security is everyone’s responsibility"
+- "Security is everyone's responsibility"
+- "Provide a valuable insight"
+- "Left an indelible mark"
+- "A stark reminder"
+- "A nuanced understanding"
+- "The complex interplay"
+- "An unwavering commitment"
+- "Underscore the importance"
+- "Play a pivotal role"
+- "A pivotal moment"
+- "Navigate the complex"
+- "Mark a turning point"
+- "Gain a deeper understanding"
+- "The transformative power"
+- "A multi-faceted approach"
+- "Highlight the potential"
+- "Pave the way for"
 
 ANECDOTE AND EXAMPLE RULES:
 
@@ -434,6 +451,10 @@ If a FAQ is included:
 - Keep it short
 - Use only genuinely useful questions
 - Do not include filler questions
+
+WORD COUNT RULE:
+
+The article body (the content and article fields) must be a minimum of 1000 words. Do not stop writing before reaching 1000 words. If the article feels complete before 1000 words, expand on the failure patterns, add a real-world scenario, or go deeper on one of the practical points. Do not pad with filler — extend with substance.
 
 CONTENT DEPTH:
 
@@ -691,7 +712,7 @@ export async function POST(request: NextRequest) {
         { role: 'user', content: userPrompt },
       ],
       temperature: 0.92,
-      max_tokens: 2600,
+      max_tokens: 3200,
       response_format: { type: 'json_object' },
     })
 
