@@ -204,50 +204,73 @@ const pickFallbackLinkTargets = (
 
   return scored
     .sort((a, b) => b.score - a.score)
-    .filter((item) => item.score > 0 || scored.length <= 3)
-    .slice(0, 3)
+    .filter((item) => item.score > 0 || scored.length <= 2)
+    .slice(0, 2)
     .map(({ candidate }) => ({
-      title: candidate.title,
+      title: cleanInternalLinkTitle(candidate.title),
       slug: candidate.slug.replace(/^\/+|\/+$/g, ''),
-      anchor: candidate.title
-        .replace(/^(Why|How|What|When|Where)\s+/i, '')
-        .replace(/\s*\([^)]*\)\s*/g, '')
-        .trim()
-        .slice(0, 80) || candidate.title.slice(0, 80),
+      anchor: buildInternalLinkAnchor(candidate.title),
       reason: 'Automatically selected as a related internal article candidate.',
     }))
+}
+
+const cleanInternalLinkTitle = (title: string) =>
+  String(title || '')
+    .replace(/^to\s+/i, '')
+    .replace(/^how\s+to\s+to\s+/i, 'How to ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const buildInternalLinkAnchor = (title: string) => {
+  const cleaned = cleanInternalLinkTitle(title)
+  return cleaned
+    .replace(/^(Why|How|What|When|Where)\s+/i, '')
+    .replace(/\s*\([^)]*\)\s*/g, '')
+    .trim()
+    .slice(0, 80) || cleaned.slice(0, 80)
 }
 
 const injectMarkdownLinks = (
   content: string,
   targets: InternalLinkTarget[]
 ) => {
-  if (!content || targets.length === 0 || articleContainsInternalLinks(content)) return content
+  const usableTargets = targets.slice(0, 2)
+  if (!content || content.length < 800 || usableTargets.length === 0 || articleContainsInternalLinks(content)) return content
+
+  const patterns = [
+    (anchor: string, slug: string) => `You see the same pattern in [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `It is a similar problem to [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `The same weakness shows up in [${anchor}](/articles/${slug}).`,
+    (anchor: string, slug: string) => `That is the sort of gap covered in [${anchor}](/articles/${slug}).`,
+  ]
 
   const paragraphs = content.split(/\n\n+/)
   let linkIndex = 0
 
-  const linkedParagraphs = paragraphs.map((paragraph) => {
-    if (linkIndex >= targets.length) return paragraph
+  const linkedParagraphs = paragraphs.map((paragraph, paragraphIndex) => {
+    if (linkIndex >= usableTargets.length) return paragraph
 
     const trimmed = paragraph.trim()
     if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('- ') || /^\d+\./.test(trimmed)) return paragraph
     if (trimmed.length < 180 || /^(FAQ|Checklist|Quick Checklist)/i.test(trimmed)) return paragraph
+    if (paragraphIndex === 0 && paragraphs.length > 3) return paragraph
 
-    const target = targets[linkIndex]
+    const target = usableTargets[linkIndex]
     const slug = target.slug.replace(/^\/+|\/+$/g, '')
-    const anchor = target.anchor || target.title
+    const anchor = target.anchor || buildInternalLinkAnchor(target.title)
     const sentenceParts = paragraph.split(/(?<=[.!?])\s+/)
-    const sentenceIndex = sentenceParts.findIndex((sentence) => sentence.length > 110 && !sentence.includes('](/articles/'))
+    const sentenceIndex = sentenceParts.findIndex((sentence) => sentence.length > 90 && !sentence.includes('](/articles/'))
     if (sentenceIndex === -1) return paragraph
 
-    sentenceParts[sentenceIndex] = `${sentenceParts[sentenceIndex]} It connects closely with [${anchor}](/articles/${slug}).`
+    const pattern = patterns[(paragraphIndex + linkIndex) % patterns.length]
+    sentenceParts[sentenceIndex] = `${sentenceParts[sentenceIndex]} ${pattern(anchor, slug)}`
     linkIndex += 1
     return sentenceParts.join(' ')
   })
 
   return linkedParagraphs.join('\n\n')
 }
+
 
 const enforceInternalLinkInjection = (
   draft: GeneratedArticleDraft & { article?: string; internal_links?: InternalLinkTarget[]; internal_link_targets?: InternalLinkTarget[] },
@@ -258,8 +281,8 @@ const enforceInternalLinkInjection = (
 
   const existingLinks = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
   const targets = existingLinks.length > 0
-    ? existingLinks.slice(0, 3)
-    : pickFallbackLinkTargets(candidates, draft, prompt).slice(0, 3)
+    ? existingLinks.slice(0, 2)
+    : pickFallbackLinkTargets(candidates, draft, prompt).slice(0, 2)
 
   if (!articleContainsInternalLinks(draft.content)) {
     draft.content = injectMarkdownLinks(draft.content, targets)
@@ -618,7 +641,7 @@ export async function POST(request: NextRequest) {
     .select('title, slug, excerpt, content_cluster, pillar_topic')
     .eq('status', 'published')
     .order('published_at', { ascending: false })
-    .limit(18)
+    .limit(8)
 
   const linkCandidates = (existingArticles ?? [])
     .filter((article) => article.title && article.slug)

@@ -24,3 +24,11 @@ Global fixes applied for Lighthouse/PageSpeed issues:
 - Removed global `preconnect`/`dns-prefetch` hints for `img.youtube.com` and `i.ytimg.com` from `app/layout.tsx`.
 - Why: article/video thumbnails are rendered through Next.js `next/image`, so the browser requests `/_next/image` from your own origin during initial load. That made the YouTube preconnect hints show up as **unused preconnects** in PageSpeed, even on articles with a YouTube video.
 - Effect: the fix now applies site-wide to all current and future articles/videos without changing your article generation workflow.
+
+## Internal link injection polish
+
+- Reduced automatic contextual internal links to a maximum of 2 per generated article.
+- Replaced repeated robotic phrasing (`It connects closely with...`) with varied natural link sentences.
+- Added anchor/title cleanup for malformed titles such as `to Conduct...`.
+- Avoids injecting links into the opening paragraph, lists, FAQs, or checklist sections.
+- Skips link injection for short articles under 800 characters.
