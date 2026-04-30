@@ -60,6 +60,21 @@ const BANNED_PHRASES = [
   'false sense of security',
   'culture of awareness',
   'security doesn\'t just happen',
+  'the reality is',
+  'hollywood break-ins',
+  'movie villains',
+  'bad guys',
+  'battlefield',
+  'frontier',
+  'brutal truth',
+  'wake-up call',
+  'not good',
+  'no gadget replaces grit',
+  'enough with the excuses',
+  'security isn\'t sexy',
+  'lazy thieves',
+  'come on in',
+  'rfid jammer',
 ]
 
 /**
@@ -152,7 +167,7 @@ export function detectAIIntro(content: string): boolean {
 /**
  * Validate article against quality criteria
  */
-export function validateArticle(content: string, minWords: number = 1000): ValidationResult {
+export function validateArticle(content: string, minWords: number = 850): ValidationResult {
   const issues: string[] = []
   const warnings: string[] = []
   

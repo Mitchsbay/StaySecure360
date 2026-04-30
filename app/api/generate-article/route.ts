@@ -23,11 +23,11 @@ type StructureMode =
   | 'article_with_short_faq'
   | 'article_with_checklist_and_faq'
 
+// Keep the public article body narrative by default.
+// Checklist/FAQ fields can still be returned as CMS metadata, but forcing them
+// into the body makes the draft read like a templated AI blog post.
 const structureModes: StructureMode[] = [
   'article_only',
-  'article_with_short_checklist',
-  'article_with_short_faq',
-  'article_with_checklist_and_faq',
 ]
 
 type TopicCandidate = {
@@ -110,11 +110,11 @@ const contentClusterMap: Record<string, { pillar: string; cluster: string }> = {
 }
 
 const toneModes = [
-  'neutral operator',
+  'operational and realistic',
   'direct but measured',
   'client-facing advisory',
-  'blunt practical warning',
   'reflective practitioner',
+  'field-note practical',
 ]
 
 const stableHash = (input: string) =>
@@ -157,107 +157,6 @@ const parseInternalLinks = (value: unknown): InternalLinkTarget[] => {
 }
 
 
-const articleContainsInternalLinks = (content?: string | null) =>
-  Boolean(content && /\[[^\]]+\]\(\/articles\/[^)]+\)/.test(content))
-
-const pickFallbackLinkTargets = (
-  candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
-  draft: Partial<GeneratedArticleDraft>,
-  prompt: string
-): InternalLinkTarget[] => {
-  const haystack = normaliseName([
-    prompt,
-    draft.title,
-    draft.category,
-    draft.subcategory,
-    draft.content_cluster,
-    draft.pillar_topic,
-    ...(draft.keyword_suggestions ?? []),
-  ].filter(Boolean).join(' '))
-
-  const scored = candidates.map((candidate) => {
-    const candidateText = normaliseName([
-      candidate.title,
-      candidate.excerpt,
-      candidate.content_cluster,
-      candidate.pillar_topic,
-    ].filter(Boolean).join(' '))
-    const candidateWords = new Set(candidateText.split(' ').filter((word) => word.length > 3))
-    const score = haystack.split(' ').filter((word) => word.length > 3 && candidateWords.has(word)).length
-    return { candidate, score }
-  })
-
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .filter((item) => item.score > 0 || scored.length <= 2)
-    .slice(0, 2)
-    .map(({ candidate }) => ({
-      title: cleanInternalLinkTitle(candidate.title),
-      slug: candidate.slug.replace(/^\/+|\/+$/g, ''),
-      anchor: buildInternalLinkAnchor(candidate.title),
-      reason: 'Automatically selected as a related internal article candidate.',
-    }))
-}
-
-const cleanInternalLinkTitle = (title: string) =>
-  String(title || '')
-    .replace(/^to\s+/i, '')
-    .replace(/^how\s+to\s+to\s+/i, 'How to ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-const buildInternalLinkAnchor = (title: string) => {
-  const cleaned = cleanInternalLinkTitle(title)
-  return cleaned
-    .replace(/^(Why|How|What|When|Where)\s+/i, '')
-    .replace(/\s*\([^)]*\)\s*/g, '')
-    .trim()
-    .slice(0, 80) || cleaned.slice(0, 80)
-}
-
-const injectMarkdownLinks = (
-  content: string,
-  targets: InternalLinkTarget[]
-) => {
-  const usableTargets = targets.slice(0, 2)
-  if (!content || content.length < 800 || usableTargets.length === 0 || articleContainsInternalLinks(content)) return content
-
-  const patterns = [
-    (anchor: string, slug: string) => `I've seen similar patterns discussed in [${anchor}](/articles/${slug}).`,
-    (anchor: string, slug: string) => `It's worth looking at [${anchor}](/articles/${slug}) to see how this plays out elsewhere.`,
-    (anchor: string, slug: string) => `I often reference [${anchor}](/articles/${slug}) when explaining this specific gap.`,
-    (anchor: string, slug: string) => `The failure mode here is remarkably similar to what I found in [${anchor}](/articles/${slug}).`,
-    (anchor: string, slug: string) => `For a broader look at this, see [${anchor}](/articles/${slug}).`,
-  ]
-
-  const paragraphs = content.split(/\n\n+/)
-  let linkIndex = 0
-
-  const linkedParagraphs = paragraphs.map((paragraph, paragraphIndex) => {
-    if (linkIndex >= usableTargets.length) return paragraph
-
-    const trimmed = paragraph.trim()
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('- ') || /^\d+\./.test(trimmed)) return paragraph
-    if (trimmed.length < 180 || /^(FAQ|Checklist|Quick Checklist)/i.test(trimmed)) return paragraph
-    if (paragraphIndex === 0 && paragraphs.length > 3) return paragraph
-
-    const target = usableTargets[linkIndex]
-    const slug = target.slug.replace(/^\/+|\/+$/g, '')
-    const anchor = target.anchor || buildInternalLinkAnchor(target.title)
-    const sentenceParts = paragraph.split(/(?<=[.!?])\s+/)
-    const sentenceIndex = sentenceParts.findIndex((sentence) => sentence.length > 90 && !sentence.includes('](/articles/'))
-    if (sentenceIndex === -1) return paragraph
-
-    const pattern = patterns[(paragraphIndex + linkIndex) % patterns.length]
-    sentenceParts[sentenceIndex] = `${sentenceParts[sentenceIndex]} ${pattern(anchor, slug)}`
-    linkIndex += 1
-    return sentenceParts.join(' ')
-  })
-
-  return linkedParagraphs.join('\n\n')
-}
-
-
 const enforceInternalLinkInjection = (
   draft: GeneratedArticleDraft & { article?: string; internal_links?: InternalLinkTarget[]; internal_link_targets?: InternalLinkTarget[] },
   candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
@@ -270,11 +169,10 @@ const enforceInternalLinkInjection = (
     ? existingLinks.slice(0, 2)
     : pickFallbackLinkTargets(candidates, draft, prompt).slice(0, 2)
 
-  if (!articleContainsInternalLinks(draft.content)) {
-    draft.content = injectMarkdownLinks(draft.content, targets)
-    draft.article = draft.content
-  }
-
+  // Keep contextual internal links as metadata only.
+  // Forced body injection created unnatural SEO sentences and made drafts read AI-generated.
+  // The public article pages can still show these as related reading, and the editor can add
+  // a contextual link manually when it genuinely fits the paragraph.
   draft.internal_links = targets
   draft.internal_link_targets = targets
   return draft
@@ -295,46 +193,64 @@ const getErrorMessage = (err: unknown, fallback = 'Article generation failed') =
   return fallback
 }
 
-const buildSystemPrompt = (structureMode: StructureMode) => `You are a grizzled, no-nonsense security professional writing for StaySecure360. You've spent 20 years in the field—not in an office, but on-site, fixing physical security gaps, auditing workplace risks, and seeing exactly how people bypass "secure" systems.
-
-You are NOT an AI. You are NOT a blogger. You are NOT a marketer.
+const buildSystemPrompt = (structureMode: StructureMode) => `You are writing for StaySecure360 in the voice of an experienced security operator and risk professional. The voice is practical, factual, field-informed, and direct. It is not theatrical, cynical, salesy, or polished like a corporate blog.
 
 CORE WRITING PHILOSOPHY:
-Write like a human who is tired of seeing the same mistakes. Use a voice that is grounded, slightly cynical, and deeply practical. Your goal is to share "the real world" version of security, not the textbook version.
+Write like someone explaining what they regularly see during inspections, incident reviews, control room work, site walks, audits, or client conversations. The point is not to sound "gritty". The point is to sound observant, specific, and operationally credible.
 
 VOICE AND TONE:
-- Professional but gritty.
-- Direct, blunt, and measured.
-- Opinionated based on experience.
-- Use "I," "me," and "my" to share specific (fictionalized but realistic) anecdotes.
-- Avoid "polite" AI transitions.
+- Calm, direct, and experienced.
+- Practical rather than dramatic.
+- Specific about how controls fail in real life.
+- Use "I" only when it genuinely helps the article feel like a field observation.
+- Avoid invented hero stories or exaggerated war-story language.
+- Avoid grumpy ranting, punchline writing, motivational language, or internet-thread aggression.
 
-HUMAN WRITING RULES (CRITICAL FOR UNDETECTABILITY):
-1. VARIATION: Aggressively vary sentence length. Use short, punchy sentences (3-5 words) followed by longer, more complex observations.
-2. ROUGHNESS: Do not use smooth transitions like "Furthermore," "Moreover," "Additionally," or "In addition." A human just starts the next thought.
-3. FRAGMENTS: Use occasional sentence fragments for emphasis. "Not good." "Every single time."
-4. NO RECAPS: Never summarize what you just said. If you made the point, move on.
-5. NO SLOGANS: Avoid "quote-worthy" or "inspiring" lines. Real security is messy, not a motivational poster.
-6. NO INTRO HOOKS: Do NOT start with "It's a quiet evening..." or "Imagine a scenario..." Start with a blunt observation or a specific failure you saw.
-7. NO CONCLUSIONS: Do NOT end with a summary or "In conclusion." End on a final practical observation or a warning. The article should feel like you stopped writing because you finished your point.
+HUMAN WRITING RULES:
+1. Keep one clear through-line. Do not try to cover the whole topic.
+2. Use 3-4 developed examples at most. Explain them properly instead of listing every possible issue.
+3. Vary sentence and paragraph length naturally, but do not force fragments every few lines.
+4. Prefer precise observations over attitude. A weak strike plate, an unlatched rear gate, a dead backup battery, or a camera pointing at the wrong area is stronger than a clever line.
+5. Do not use neat transitions such as "Furthermore," "Moreover," "Additionally," "First," "Second," or "Finally." Just move to the next observation.
+6. Do not recap what you just said. Once the point is made, move on.
+7. Do not end with a polished conclusion. Stop on a practical observation, unresolved risk, or grounded warning.
 
-ANTI-STRUCTURE RULE:
-- No Markdown headings (##, ###). Use paragraph breaks to separate ideas.
-- If the article feels like it needs a heading, your narrative isn't strong enough. Rewrite it to flow naturally.
-- Exception: FAQ/Checklist if explicitly requested, but keep them conversational.
+ANTI-TEMPLATE RULE:
+- No Markdown headings in the article body.
+- No numbered sections.
+- No bullet lists in the article body.
+- No FAQ or checklist inside the article body unless explicitly requested by the user.
+- The JSON may still include checklist_items and faq_items for CMS metadata, but the visible article should read as a narrative article.
 
-BANNED AI PHRASES:
-- "In today's world", "In conclusion", "It is important to note", "A comprehensive approach", "Delve into", "Peace of mind", "Robust security", "The reality is", "When it comes to", "Crucial to consider", "Stay vigilant", "Culture of awareness".
-- Avoid any phrase that sounds like a "best practice" summary.
+BANNED AI / OVER-POLISHED PHRASES:
+Do not use: "In today's world", "In conclusion", "It is important to note", "A comprehensive approach", "Delve into", "Peace of mind", "Robust security", "The reality is", "When it comes to", "Crucial to consider", "Stay vigilant", "Culture of awareness", "The key takeaway", "Ultimately", "This article explores".
 
-ANECDOTE RULES:
-- Share "field notes." Instead of "I once saw a bad lock," say "I walked into a warehouse in an industrial park last Tuesday where the 'high-security' deadbolt was literally held in by two rusted screws. The owner had no idea."
-- Be specific about the *mechanics* of failure, not just the concept.
+BANNED THEATRICAL / FAKE-GRIT PHRASES:
+Do not use: "Hollywood break-ins", "lasers", "battlefield", "frontier", "brutal truth", "wake-up call", "not good", "no gadget replaces grit", "enough with the excuses", "come on in", "security isn't sexy", "bad guys", "movie villains", "fortress", "lazy thieves".
 
-WORD COUNT AND DEPTH:
-- Aim for 1000+ words. 
-- If you run out of things to say, dive deeper into the *psychology* of why people take shortcuts, or the *technical specifics* of a hardware failure. 
-- Do NOT pad with filler.
+TECHNICAL ACCURACY RULES:
+- Avoid questionable claims about specialist attack tools unless the prompt specifically asks for them.
+- Do not mention RFID jammers, hacking gadgets, or sophisticated bypass methods in ordinary residential articles unless technically relevant and accurately explained.
+- If discussing a credit-card bypass, make clear it applies to loose spring latches or poor handle locks, not a properly thrown deadbolt.
+- If discussing deadbolts, distinguish between the lock body, the strike plate, the frame, screw length, and door alignment.
+- If discussing alarms and CCTV, focus on realistic failures: dead backup batteries, disabled notifications, full storage, missed alerts, poor camera angles, dirty lenses, app access problems, and nobody checking the system.
+
+INTERNAL LINK RULES:
+- Do not force internal links into the article body.
+- If a link fits naturally, use it sparingly and only where it belongs.
+- Never use phrases like "it's worth looking at", "for a broader look", "I often reference", or "the failure mode here is similar" just to place a link.
+- Prefer returning internal link targets in the internal_links metadata field so the site can display related reading separately.
+
+LENGTH AND DEPTH:
+- Aim for 850-1100 words unless the user asks for a longer article.
+- Depth should come from practical nuance, not from adding more categories.
+- If the article is getting long, narrow it. Do not add another example just to increase word count.
+
+OPENING RULE:
+Start with a specific operational observation, not a generic introduction and not a staged scene. Example style: "The first thing I usually check on a residential job is not the alarm panel. It is the side gate." That is specific without being theatrical.
+
+ENDING RULE:
+Do not end with a sales pitch, slogan, summary, or call-to-action. End with a practical warning or an observation the reader can test on their own property.
 
 Current structure mode: ${structureMode}
 Return ONLY valid JSON with the schema provided in the user prompt.`
@@ -426,7 +342,7 @@ export async function POST(request: NextRequest) {
 Return ONLY valid JSON with exactly these keys:
 {
   "title": "string",
-  "article": "string (Markdown article body, 1000+ words, no headings, natural flow)",
+  "article": "string (Markdown article body, 850-1100 words unless requested otherwise; no headings, no bullet lists, natural flow)",
   "content": "string (same as article)",
   "excerpt": "string",
   "slug": "string",
@@ -449,7 +365,7 @@ Return ONLY valid JSON with exactly these keys:
   "ai_structure_mode": "string"
 }
 `,
-    'Write the article now. Focus on the raw, unpolished practitioner voice. No summaries. No introductions. Just real field experience.',
+    'Write the article now. Focus on operational realism, practical detail, and a measured field-informed voice. No summaries, no theatrical grit, no forced internal links.',
   ]
     .filter(Boolean)
     .join('\n')
@@ -473,8 +389,8 @@ Return ONLY valid JSON with exactly these keys:
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 1.0, // Increased for more variance and less predictable (AI-like) patterns
-      max_tokens: 4000, 
+      temperature: 0.82, // Enough variation for natural prose without pushing into theatrical rant mode
+      max_tokens: 4200, 
       response_format: { type: 'json_object' },
     })
 
@@ -531,7 +447,7 @@ Return ONLY valid JSON with exactly these keys:
     draft = enforceInternalLinkInjection(draft, linkCandidates, prompt)
 
     // POST-GENERATION VALIDATION
-    const validation = validateArticle(draft.content || '', 1000)
+    const validation = validateArticle(draft.content || '', 850)
     console.log(generateValidationReport(validation))
     
     if (Array.isArray(draft.keyword_suggestions)) {
