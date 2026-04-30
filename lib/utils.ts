@@ -57,7 +57,24 @@ export function truncate(text: string, maxLength: number): string {
 // Get the site base URL and normalise it for consistent canonicals/sitemaps.
 export function getSiteUrl(): string {
   const raw = process.env.NEXT_PUBLIC_SITE_URL?.trim() || 'https://www.staysecure360.com'
-  return raw.replace(/\/$/, '')
+
+  try {
+    const url = new URL(raw)
+
+    // Keep all canonical, sitemap, OpenGraph and robots URLs on one host.
+    // Search Console was reporting duplicate canonicals; the www host is the chosen canonical.
+    if (url.hostname === 'staysecure360.com') {
+      url.hostname = 'www.staysecure360.com'
+    }
+
+    url.protocol = 'https:'
+    url.pathname = url.pathname.replace(/\/$/, '')
+    url.search = ''
+    url.hash = ''
+    return url.toString().replace(/\/$/, '')
+  } catch {
+    return 'https://www.staysecure360.com'
+  }
 }
 
 // Convert markdown-style content to plain text (for excerpts)

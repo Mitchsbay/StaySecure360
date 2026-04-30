@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import Image from 'next/image'
 import { getYouTubeThumbnail } from '@/lib/youtube'
 
 interface YouTubeThumbnailProps {
@@ -33,14 +32,16 @@ export default function YouTubeThumbnail({
   const [sourceIndex, setSourceIndex] = useState(0)
 
   return (
-    <Image
+    <img
       src={sources[sourceIndex]}
       alt={alt}
-      fill
       sizes={sizes}
-      className={className}
-      priority={priority}
+      width={480}
+      height={360}
+      className={`absolute inset-0 h-full w-full ${className}`}
+      fetchPriority={priority ? 'high' : 'auto'}
       loading={priority ? 'eager' : 'lazy'}
+      decoding="async"
       onError={() => {
         setSourceIndex((current) => (current < sources.length - 1 ? current + 1 : current))
       }}

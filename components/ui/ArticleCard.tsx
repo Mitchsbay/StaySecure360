@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import Image from 'next/image'
 import YouTubeThumbnail from '@/components/ui/YouTubeThumbnail'
 import { Calendar, ArrowRight } from 'lucide-react'
 import { formatDate, truncate } from '@/lib/utils'
@@ -47,14 +46,15 @@ export default function ArticleCard({ article, variant = 'default', priority = f
               quality="mq"
             />
           ) : (
-            <Image
+            <img
               src={article.featured_image_url!}
               alt={article.title}
-              fill
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
-              className="object-cover transition-transform duration-300 group-hover:scale-105"
+              width={640}
+              height={360}
               loading={priority ? 'eager' : 'lazy'}
-              priority={priority}
+              fetchPriority={priority ? 'high' : 'auto'}
+              decoding="async"
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           )}
         </Link>

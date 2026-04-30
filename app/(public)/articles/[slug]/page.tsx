@@ -17,7 +17,6 @@ import FaqAccordion from '@/components/ui/FaqAccordion'
 import Checklist from '@/components/ui/Checklist'
 import VideoEmbed from '@/components/ui/VideoEmbed'
 import ArticleCard from '@/components/ui/ArticleCard'
-import Image from 'next/image'
 
 // ISR — pages are cached and regenerated in the background every 10 minutes.
 // This dramatically reduces the cold-start response time (from ~3s to <200ms)
@@ -105,16 +104,21 @@ export default async function ArticlePage({ params }: Props) {
             )}
           </header>
 
-          {/* Featured hero image */}
+          {/* Featured hero image
+              Use a plain <img> for remote article images instead of Next's /_next/image proxy.
+              This avoids Google Search Console render failures where remote Supabase/YouTube
+              images cannot be fetched through the Next image optimiser. */}
           {article.featured_image_url && !article.youtube_video_id && (
-            <div className="mb-8 rounded-xl overflow-hidden relative h-64 md:h-96">
-              <Image
+            <div className="mb-8 rounded-xl overflow-hidden relative h-64 md:h-96 bg-gray-100">
+              <img
                 src={article.featured_image_url}
                 alt={article.title}
-                fill
-                sizes="(max-width: 896px) 100vw, 896px"
-                className="object-cover"
-                priority
+                width={1200}
+                height={630}
+                loading="eager"
+                fetchPriority="high"
+                decoding="async"
+                className="absolute inset-0 h-full w-full object-cover"
               />
             </div>
           )}
