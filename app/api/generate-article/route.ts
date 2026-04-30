@@ -157,6 +157,63 @@ const parseInternalLinks = (value: unknown): InternalLinkTarget[] => {
 }
 
 
+const cleanInternalLinkTitle = (title: string) =>
+  String(title || '')
+    .replace(/^to\s+/i, '')
+    .replace(/^how\s+to\s+to\s+/i, 'How to ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const buildInternalLinkAnchor = (title: string) => {
+  const cleaned = cleanInternalLinkTitle(title)
+  return cleaned
+    .replace(/^(Why|How|What|When|Where)\s+/i, '')
+    .replace(/\s*\([^)]*\)\s*/g, '')
+    .trim()
+    .slice(0, 80) || cleaned.slice(0, 80)
+}
+
+const pickFallbackLinkTargets = (
+  candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
+  draft: Partial<GeneratedArticleDraft>,
+  prompt: string
+): InternalLinkTarget[] => {
+  const haystack = normaliseName([
+    prompt,
+    draft.title,
+    draft.category,
+    draft.subcategory,
+    draft.content_cluster,
+    draft.pillar_topic,
+    ...(draft.keyword_suggestions ?? []),
+  ].filter(Boolean).join(' '))
+
+  const haystackWords = haystack.split(' ').filter((word) => word.length > 3)
+
+  const scored = candidates.map((candidate) => {
+    const candidateText = normaliseName([
+      candidate.title,
+      candidate.excerpt,
+      candidate.content_cluster,
+      candidate.pillar_topic,
+    ].filter(Boolean).join(' '))
+    const candidateWords = new Set(candidateText.split(' ').filter((word) => word.length > 3))
+    const score = haystackWords.filter((word) => candidateWords.has(word)).length
+    return { candidate, score }
+  })
+
+  return scored
+    .sort((a, b) => b.score - a.score)
+    .filter((item) => item.score > 0 || scored.length <= 2)
+    .slice(0, 2)
+    .map(({ candidate }) => ({
+      title: cleanInternalLinkTitle(candidate.title),
+      slug: candidate.slug.replace(/^\/+|\/+$/g, ''),
+      anchor: buildInternalLinkAnchor(candidate.title),
+      reason: 'Automatically selected as a related internal article candidate.',
+    }))
+}
+
 const enforceInternalLinkInjection = (
   draft: GeneratedArticleDraft & { article?: string; internal_links?: InternalLinkTarget[]; internal_link_targets?: InternalLinkTarget[] },
   candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
