@@ -140,7 +140,7 @@ const getErrorMessage = (err: unknown, fallback = 'Article generation failed') =
 }
 
 // ============================================================
-// MASTER SYSTEM PROMPT v4 — Tightened for latest output
+// MASTER SYSTEM PROMPT v4 — Tightened
 // ============================================================
 const buildSystemPrompt = (structureMode: StructureMode) => `
 You are a seasoned security operator writing for StaySecure360. 
@@ -178,7 +178,7 @@ const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle
 
 const buildNarrativeRewritePrompt = (article: string) => `Rewrite the article to sound like natural field observations from an experienced security operator.
 
-Remove all walking-tour structure, predictable transitions, and polished language. Make paragraph starters varied and human.
+Make it flow naturally. Remove all walking-tour structure, predictable transitions, and polished language. Vary paragraph starters heavily.
 
 Return ONLY this JSON:
 {
@@ -263,17 +263,39 @@ Write a natural, field-informed article following all system prompt rules.`
       response_format: { type: 'json_object' },
     })
 
-    let draft = JSON.parse(completion.choices[0]?.message?.content || '{}')
+    const rawContent = completion.choices[0]?.message?.content
+    if (!rawContent) {
+      return NextResponse.json({ error: 'No content generated from AI' }, { status: 500 })
+    }
 
-    draft.content = draft.content || draft.article || ''
-    draft.article = draft.article || draft.content
+    let draft: any
+    try {
+      draft = JSON.parse(rawContent)
+    } catch (e) {
+      console.error('JSON parse error:', e)
+      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
+    }
+
+    // Safe content handling
+    draft.content = typeof draft.content === 'string' ? draft.content : ''
+    draft.article = typeof draft.article === 'string' ? draft.article : draft.content
 
     if (!draft.slug) draft.slug = generateSlug(draft.title || 'untitled')
-    if (!draft.excerpt && draft.content) {
-      draft.excerpt = draft.content.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
-    }
-    if (!draft.meta_description) draft.meta_description = draft.excerpt || ''
+    if (!draft.meta_title) draft.meta_title = String(draft.title || '').slice(0, 60)
 
+    // Safe excerpt generation
+    if (!draft.excerpt && draft.content) {
+      draft.excerpt = draft.content
+        .replace(/[#*_`>\n]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 160)
+    }
+    if (!draft.meta_description) {
+      draft.meta_description = draft.excerpt || ''
+    }
+
+    // Topic matching
     const topicCandidates = (availableTopics ?? []) as TopicCandidate[]
     const matchedTopic = findBestTopic(topicCandidates, [draft.subcategory, draft.suggested_topic, draft.category, topic, prompt])
     if (matchedTopic) draft.topic_id = matchedTopic.id
@@ -302,7 +324,7 @@ Write a natural, field-informed article following all system prompt rules.`
         })
 
         const rewritten = JSON.parse(rewriteCompletion.choices[0]?.message?.content || '{}')
-        if (rewritten.article && countWords(rewritten.article) > 850) {
+        if (rewritten.article && typeof rewritten.article === 'string' && countWords(rewritten.article) > 850) {
           draft.article = rewritten.article
           draft.content = rewritten.article
           console.log('[Narrative Rewrite Applied]')
