@@ -204,6 +204,8 @@ This means the article generator is not relying only on the user prompt box. The
 
 V6 specifically adds a plain-language rewrite requirement so a focused article does not over-correct into a formal inspection report. V6.1 restores natural internal linking and fixes the article-page excerpt display so the generated excerpt does not look like an oversized first paragraph when it duplicates the article opening.
 
+V6.2 tightens natural internal linking so the same article and anchor text cannot be repeated, avoids links in the first two paragraphs, adds Australian English cleanup, discourages checklist-style endings such as "try this / then / finally", and removes the article-page header excerpt entirely so the excerpt can no longer appear as an oversized first paragraph above the body.
+
 ## Structure mode
 
 The generator uses `article_only` as the default structure mode.
@@ -264,3 +266,5 @@ It should end with a practical warning, unresolved risk, or an observation the r
 - `/app/api/generate-article/route.ts`
 - `/lib/article-validation.ts`
 - `/ARTICLE_GENERATOR_PROMPT.md`
+- `/app/(public)/articles/[slug]/page.tsx`
+- `/app/globals.css`

@@ -8,7 +8,7 @@ import {
   getChecklistByArticle,
   getRelatedArticles,
 } from '@/lib/queries'
-import { markdownToHtml, stripMarkdown } from '@/lib/utils'
+import { markdownToHtml } from '@/lib/utils'
 import { buildArticleMetadata } from '@/lib/metadata'
 import { articleSchema, faqSchema, breadcrumbSchema, videoSchema } from '@/lib/schema'
 import { formatDate } from '@/lib/utils'
@@ -43,13 +43,6 @@ export default async function ArticlePage({ params }: Props) {
     getChecklistByArticle(article.id),
     getRelatedArticles(article.id, article.topic_id, 3, article.internal_link_targets, article.content_cluster),
   ])
-
-  const plainArticleOpening = stripMarkdown(article.content ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
-  const excerptText = (article.excerpt ?? '').replace(/\s+/g, ' ').trim()
-  const excerptProbe = excerptText.slice(0, 120).toLowerCase()
-  const showHeaderExcerpt = Boolean(
-    excerptText && (!excerptProbe || !plainArticleOpening.startsWith(excerptProbe))
-  )
 
   const breadcrumbs = [
     { label: 'Articles', href: '/articles' },
@@ -104,9 +97,6 @@ export default async function ArticlePage({ params }: Props) {
             <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4 leading-tight">
               {article.title}
             </h1>
-            {showHeaderExcerpt && (
-              <p className="text-base md:text-lg text-gray-600 leading-relaxed mb-4">{excerptText}</p>
-            )}
             {article.published_at && (
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <Calendar className="w-4 h-4" />

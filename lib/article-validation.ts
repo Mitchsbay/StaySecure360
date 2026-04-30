@@ -312,6 +312,64 @@ export function detectFormalAuditLanguage(content: string): boolean {
 }
 
 /**
+ * Detect repeated internal links, duplicate anchors, or internal links too early in the article.
+ */
+export function getInternalLinkWarnings(content: string): string[] {
+  if (!content) return []
+
+  const warnings: string[] = []
+  const linkMatches = [...content.matchAll(/\[([^\]]+)\]\((?:\/articles\/|https?:\/\/[^)]*staysecure360\.com\/)([^)]+)\)/gi)]
+
+  if (linkMatches.length === 0) return warnings
+
+  const slugs = linkMatches.map((match) => String(match[2] || '').replace(/^articles\//i, '').replace(/^\/+|\/+$/g, '').toLowerCase())
+  const anchors = linkMatches.map((match) => String(match[1] || '').trim().toLowerCase())
+
+  if (new Set(slugs).size < slugs.length) {
+    warnings.push('same internal article linked more than once')
+  }
+
+  if (new Set(anchors).size < anchors.length) {
+    warnings.push('same internal anchor text repeated')
+  }
+
+  const firstTwoParagraphs = content.split(/\n{2,}/).slice(0, 2).join('\n\n')
+  if (/\[[^\]]+\]\((?:\/articles\/|https?:\/\/[^)]*staysecure360\.com\/)/i.test(firstTwoParagraphs)) {
+    warnings.push('internal link appears in the first two paragraphs')
+  }
+
+  if (linkMatches.length > 2) {
+    warnings.push('more than two internal links in the article body')
+  }
+
+  return warnings
+}
+
+export function detectInternalLinkOveruse(content: string): boolean {
+  return getInternalLinkWarnings(content).length > 0
+}
+
+/**
+ * Detect checklist-style endings that break the narrative article voice.
+ */
+export function detectChecklistEnding(content: string): boolean {
+  if (!content) return false
+
+  const paragraphs = content.trim().split(/\n{2,}/).filter(Boolean)
+  const closingText = paragraphs.slice(-3).join(' ').toLowerCase()
+
+  const checklistPatterns = [
+    /if\s+you\s+want\s+to\s+test\s+your\s+own\s+setup/,
+    /try\s+this:/,
+    /then\s+walk\s+around/,
+    /finally,\s+take\s+a\s+look/,
+    /check\s+your\s+sliding\s+doors?.*look\s+at\s+your\s+cameras?.*test\s+your\s+alarm/s,
+  ]
+
+  return checklistPatterns.some((pattern) => pattern.test(closingText))
+}
+
+/**
  * Detect forced or SEO-style internal link placement.
  */
 export function detectForcedInternalLinks(content: string): boolean {
@@ -372,6 +430,9 @@ export function validateArticle(content: string, minWords: number = 850): Valida
   const hasRepetitiveFieldOpenings = detectRepetitiveFieldOpenings(content)
   const hasFormalAuditLanguage = detectFormalAuditLanguage(content)
   const hasForcedInternalLinks = detectForcedInternalLinks(content)
+  const internalLinkWarnings = getInternalLinkWarnings(content)
+  const hasInternalLinkOveruse = detectInternalLinkOveruse(content)
+  const hasChecklistEnding = detectChecklistEnding(content)
 
   if (wordCount < minWords) {
     issues.push(`Article is ${wordCount} words (minimum: ${minWords})`)
@@ -417,6 +478,14 @@ export function validateArticle(content: string, minWords: number = 850): Valida
     warnings.push('Article appears to contain forced internal link placement')
   }
 
+  if (hasInternalLinkOveruse) {
+    warnings.push(`Article has internal-link overuse or duplicate placement: ${internalLinkWarnings.join(' | ')}`)
+  }
+
+  if (hasChecklistEnding) {
+    warnings.push('Article ending reads like a step-by-step checklist rather than narrative prose')
+  }
+
   let score = 100
   score -= Math.max(0, (minWords - wordCount) / minWords) * 20
   score -= bannedPhrases.length * 5
@@ -429,6 +498,8 @@ export function validateArticle(content: string, minWords: number = 850): Valida
   score -= hasRepetitiveFieldOpenings ? 12 : 0
   score -= hasFormalAuditLanguage ? 12 : 0
   score -= hasForcedInternalLinks ? 12 : 0
+  score -= hasInternalLinkOveruse ? 10 : 0
+  score -= hasChecklistEnding ? 10 : 0
 
   score = Math.max(0, Math.min(100, score))
 

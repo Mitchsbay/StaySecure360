@@ -157,6 +157,24 @@ const parseInternalLinks = (value: unknown): InternalLinkTarget[] => {
 }
 
 
+const dedupeInternalLinkTargets = (links: InternalLinkTarget[], max = 4): InternalLinkTarget[] => {
+  const seenSlugs = new Set<string>()
+  const seenAnchors = new Set<string>()
+  const deduped: InternalLinkTarget[] = []
+
+  for (const link of links) {
+    const slugKey = link.slug.replace(/^\/+|\/+$/g, '').toLowerCase()
+    const anchorKey = link.anchor.trim().toLowerCase()
+    if (!slugKey || !anchorKey || seenSlugs.has(slugKey) || seenAnchors.has(anchorKey)) continue
+    seenSlugs.add(slugKey)
+    seenAnchors.add(anchorKey)
+    deduped.push({ ...link, slug: slugKey })
+    if (deduped.length >= max) break
+  }
+
+  return deduped
+}
+
 const cleanInternalLinkTitle = (title: string) =>
   String(title || '')
     .replace(/^to\s+/i, '')
@@ -193,6 +211,44 @@ const softenPublicArticleLanguage = (content: string) => {
     .replace(/\bthe initial unauthori[sz]ed entry\b/gi, 'the first way in')
 }
 
+const normaliseAustralianSpelling = (content: string) => {
+  if (!content) return content
+
+  return content
+    .replace(/\bneighbors\b/g, 'neighbours')
+    .replace(/\bNeighbors\b/g, 'Neighbours')
+    .replace(/\bneighbor\b/g, 'neighbour')
+    .replace(/\bNeighbor\b/g, 'Neighbour')
+    .replace(/\bmillimeters\b/g, 'millimetres')
+    .replace(/\bMillimeters\b/g, 'Millimetres')
+    .replace(/\bmillimeter\b/g, 'millimetre')
+    .replace(/\bMillimeter\b/g, 'Millimetre')
+    .replace(/\bcentimeters\b/g, 'centimetres')
+    .replace(/\bCentimeters\b/g, 'Centimetres')
+    .replace(/\bcentimeter\b/g, 'centimetre')
+    .replace(/\bCentimeter\b/g, 'Centimetre')
+    .replace(/\bmeters\b/g, 'metres')
+    .replace(/\bMeters\b/g, 'Metres')
+    .replace(/\bmeter\b/g, 'metre')
+    .replace(/\bMeter\b/g, 'Metre')
+    .replace(/\bdefenses\b/g, 'defences')
+    .replace(/\bDefenses\b/g, 'Defences')
+    .replace(/\bdefense\b/g, 'defence')
+    .replace(/\bDefense\b/g, 'Defence')
+    .replace(/\bunauthorized\b/g, 'unauthorised')
+    .replace(/\bUnauthorized\b/g, 'Unauthorised')
+    .replace(/\bauthorized\b/g, 'authorised')
+    .replace(/\bAuthorized\b/g, 'Authorised')
+    .replace(/\borganizing\b/g, 'organising')
+    .replace(/\bOrganizing\b/g, 'Organising')
+    .replace(/\borganized\b/g, 'organised')
+    .replace(/\bOrganized\b/g, 'Organised')
+    .replace(/\borganization\b/g, 'organisation')
+    .replace(/\bOrganization\b/g, 'Organisation')
+    .replace(/\borganizations\b/g, 'organisations')
+    .replace(/\bOrganizations\b/g, 'Organisations')
+}
+
 const pickFallbackLinkTargets = (
   candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
   draft: Partial<GeneratedArticleDraft>,
@@ -222,16 +278,17 @@ const pickFallbackLinkTargets = (
     return { candidate, score }
   })
 
-  return scored
+  const fallbackLinks = scored
     .sort((a, b) => b.score - a.score)
     .filter((item) => item.score > 0 || scored.length <= 2)
-    .slice(0, 2)
     .map(({ candidate }) => ({
       title: cleanInternalLinkTitle(candidate.title),
       slug: candidate.slug.replace(/^\/+|\/+$/g, ''),
       anchor: buildInternalLinkAnchor(candidate.title),
       reason: 'Automatically selected as a related internal article candidate.',
     }))
+
+  return dedupeInternalLinkTargets(fallbackLinks, 2)
 }
 
 
@@ -291,23 +348,36 @@ const applyNaturalInternalLinks = (
   if (!content || targets.length === 0 || /\[[^\]]+\]\([^)]+\)/.test(content)) return content
 
   const paragraphs = content.split(/\n{2,}/)
+  const usableTargets = dedupeInternalLinkTargets(targets, maxLinks)
+  const usedSlugs = new Set<string>()
+  const usedAnchors = new Set<string>()
   let linksAdded = 0
 
-  for (const target of targets.slice(0, maxLinks)) {
+  for (const target of usableTargets) {
     if (linksAdded >= maxLinks) break
 
-    const phrases = getNaturalLinkPhrases(target)
+    const slugKey = target.slug.replace(/^\/+|\/+$/g, '').toLowerCase()
+    if (usedSlugs.has(slugKey)) continue
 
-    for (let paragraphIndex = 1; paragraphIndex < paragraphs.length; paragraphIndex += 1) {
-      if (linksAdded >= maxLinks) break
+    const phrases = [...new Set(getNaturalLinkPhrases(target).map((phrase) => phrase.trim()).filter(Boolean))]
+
+    // Keep links out of the opening. Body links in the first two paragraphs
+    // make the article feel like SEO copy before the field observation has landed.
+    for (let paragraphIndex = 2; paragraphIndex < paragraphs.length; paragraphIndex += 1) {
+      if (linksAdded >= maxLinks || usedSlugs.has(slugKey)) break
 
       const paragraph = paragraphs[paragraphIndex]
       if (!paragraph || paragraph.includes('](')) continue
 
       for (const phrase of phrases) {
+        const anchorKey = phrase.toLowerCase()
+        if (usedAnchors.has(anchorKey)) continue
+
         const result = replacePhraseWithLink(paragraph, phrase, target.slug)
         if (result.changed) {
           paragraphs[paragraphIndex] = result.paragraph
+          usedSlugs.add(slugKey)
+          usedAnchors.add(anchorKey)
           linksAdded += 1
           break
         }
@@ -317,6 +387,7 @@ const applyNaturalInternalLinks = (
 
   return paragraphs.join('\n\n')
 }
+
 const enforceInternalLinkInjection = (
   draft: GeneratedArticleDraft & { article?: string; internal_links?: InternalLinkTarget[]; internal_link_targets?: InternalLinkTarget[] },
   candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
@@ -324,10 +395,10 @@ const enforceInternalLinkInjection = (
 ) => {
   if (!draft.content || candidates.length === 0) return draft
 
-  const existingLinks = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
+  const existingLinks = dedupeInternalLinkTargets(parseInternalLinks(draft.internal_links || draft.internal_link_targets), 4)
   const targets = existingLinks.length > 0
-    ? existingLinks.slice(0, 2)
-    : pickFallbackLinkTargets(candidates, draft, prompt).slice(0, 2)
+    ? existingLinks
+    : pickFallbackLinkTargets(candidates, draft, prompt)
 
   // Keep contextual internal links as metadata only.
   // Forced body injection created unnatural SEO sentences and made drafts read AI-generated.
@@ -364,6 +435,7 @@ PUBLIC ARTICLE REGISTER:
 - Translate formal security language into plain practitioner language. For example, prefer "side gate", "rear door", "someone getting in", "weak spot", "small failures", "routine", "habit", "maintenance check", and "what the camera actually sees" over report-style terms.
 - Avoid overusing terms such as "access control point", "unauthorized access", "unauthorised access", "cumulative failures", "layered approach", "vulnerability", "protocols", "risk controls", "perimeter defenses", "deterrence value", and "security posture" unless the user specifically asks for a formal report.
 - The reader should feel like a practitioner is walking them through what they would notice on site, not reading findings from an assessment template.
+- Use Australian English spelling for public article copy: neighbour, millimetres, metres, colour, defence, authorised, organisation.
 
 VOICE AND TONE:
 - Calm, direct, and experienced.
@@ -387,6 +459,7 @@ HUMAN WRITING RULES:
 9. Do not end with a polished conclusion. Stop on a practical observation, unresolved risk, or grounded warning.
 10. Do not repeatedly announce observations with phrases such as "A common issue", "A common failure", "I often find", "I often encounter", "I often observe", "Frequently", or "In many cases". Vary the movement naturally.
 11. Keep the language plain enough that it could be said to a client during a site walk. Operational detail is good; audit-report wording is not.
+12. Do not turn the final section into a step-by-step checklist. Avoid endings built around "try this", "then", and "finally" unless the user explicitly asks for a checklist.
 
 HARD NARROWING RULE:
 - A good StaySecure360 article is not comprehensive. It follows one inspection route or one failure pattern.
@@ -426,6 +499,9 @@ TECHNICAL ACCURACY RULES:
 
 INTERNAL LINK RULES:
 - The visible article may include 1-2 internal links, but only by linking an existing natural phrase inside a relevant sentence.
+- One internal link is usually enough. Never link to the same article more than once in the same article body.
+- Do not repeat the same anchor text.
+- Do not place internal links in the first two paragraphs.
 - Do not add separate SEO link sentences.
 - Prefer returning internal link targets in the internal_links metadata field as well, so the site can display related reading separately.
 - Never interrupt a field observation with a forced link sentence.
@@ -446,6 +522,7 @@ Do not copy this example verbatim, but this is the type of opening expected:
 ENDING RULE:
 Do not end with a sales pitch, slogan, summary, or call-to-action.
 End with a practical warning, unresolved risk, or an observation the reader can test on their own property.
+Do not end with a checklist sequence such as "try this", "then", and "finally". Keep the final section in normal prose.
 
 FINAL STYLE CHECK BEFORE RETURNING:
 Before returning the JSON, silently check the article against these questions:
@@ -454,7 +531,7 @@ Before returning the JSON, silently check the article against these questions:
 - Does it avoid checklist/report structure?
 - Does it avoid formal audit-report language?
 - Does it stay focused on one clear through-line?
-- Are there no forced internal links in the visible article body?
+- Are there no forced or repeated internal links in the visible article body?
 - Could a real security operator plausibly say this?
 
 If the answer to any of these is no, rewrite the article before returning it.
@@ -466,7 +543,7 @@ const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle
   validation.score < 94 ||
   validation.issues.length > 0 ||
   validation.warnings.some((warning) =>
-    /report-like|checklist|category-by-category|repeated category|repetitive field phrasing|formal audit|too many issue areas|scope drift|forced internal link|markdown heading|bullet list|numbered list/i.test(warning)
+    /report-like|checklist|step-by-step|category-by-category|repeated category|repetitive field phrasing|formal audit|too many issue areas|scope drift|forced internal link|internal-link overuse|duplicate placement|markdown heading|bullet list|numbered list/i.test(warning)
   )
 
 const buildNarrativeRewritePrompt = (article: string) => `Rewrite the article below so it no longer reads like a report, checklist, SEO article, or category-by-category security guide.
@@ -485,6 +562,7 @@ Plain-language field pass:
 - Replace report terms with plain words where possible: "access control point" → "place I check" or "gate"; "unauthorized access" → "someone getting in"; "cumulative failures" → "small problems stacking up"; "layered approach" → "the rest of the setup"; "vulnerability" → "weak spot".
 - Avoid repeating the same field phrase. Do not start several paragraphs with "A common issue", "A common failure", "I often find", "I often encounter", "I often observe", "Frequently", "In many cases", or "In some cases".
 - Limit first-person field phrasing. One or two direct observations are enough; do not make every paragraph begin with "I".
+- Use Australian English spelling: neighbour, millimetres, metres, colour, defence, authorised, organisation.
 
 Mandatory rewrite rules:
 - Make it feel like an experienced operator walking through a property, reviewing an incident, or explaining a failure pattern in sequence.
@@ -493,10 +571,10 @@ Mandatory rewrite rules:
 - Do not give every issue equal weight.
 - Do not start paragraphs with report-style labels such as "Windows", "CCTV", "Alarm systems", "Lighting", "Landscaping", "Lastly", "For rental properties", or "Practical perimeter security".
 - Remove formal audit phrases such as "access control point", "unauthorized access", "cumulative failures", "layered approach", "risk controls", "deterrence value", and "security posture" unless the article is explicitly a formal report.
-- Remove headings, bullet lists, numbered sections, forced conclusions, obvious AI transitions, forced internal links, and neat summaries.
+- Remove headings, bullet lists, numbered sections, forced conclusions, obvious AI transitions, forced or repeated internal links, checklist-style endings, and neat summaries.
 - Preserve useful specifics only where they serve the route: gate latches, rear sliding doors, anti-lift issues, strike plates, screw length, door alignment, camera angle, storage, backup batteries, ignored alerts, shared codes, and maintenance.
 - Aim for 800-1000 words. Shorter and focused is better than long and comprehensive.
-- End on a practical observation or warning the reader can test, not a neat summary.
+- End on a practical observation or warning the reader can test, not a neat summary. Do not end with a "try this / then / finally" checklist sequence.
 
 Return ONLY valid JSON in this exact shape:
 {
@@ -758,7 +836,18 @@ Return ONLY valid JSON with exactly these keys:
     }
 
     if (draft.content) {
-      const naturalLinkTargets = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
+      const australianContent = normaliseAustralianSpelling(draft.content)
+      if (australianContent !== draft.content) {
+        draft.content = australianContent
+        draft.article = australianContent
+        draft.excerpt = australianContent.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
+        draft.meta_description = draft.excerpt.slice(0, 160)
+        console.log('[Australian Spelling Cleanup Applied]')
+      }
+    }
+
+    if (draft.content) {
+      const naturalLinkTargets = dedupeInternalLinkTargets(parseInternalLinks(draft.internal_links || draft.internal_link_targets), 2)
       const linkedContent = applyNaturalInternalLinks(draft.content, naturalLinkTargets, 2)
 
       if (linkedContent !== draft.content) {

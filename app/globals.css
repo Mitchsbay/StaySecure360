@@ -27,7 +27,11 @@
   }
 
   .prose-content p {
-    @apply text-gray-700 leading-relaxed mb-4;
+    @apply text-base text-gray-700 leading-relaxed mb-4;
+  }
+
+  .prose-content > p:first-child {
+    @apply text-base text-gray-700 leading-relaxed mb-4 font-normal;
   }
 
   .prose-content ul {
