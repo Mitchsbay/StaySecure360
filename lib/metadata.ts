@@ -73,8 +73,17 @@ function getArticleSeoDescription(article: Article): string {
 export function buildBaseMetadata(): Metadata {
   const siteUrl = getSiteUrl()
   const defaultImage = absoluteUrl(DEFAULT_OG_IMAGE_PATH)
+  const googleSiteVerification = process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION?.trim()
+
 
   return {
+    ...(googleSiteVerification
+      ? {
+          verification: {
+            google: googleSiteVerification,
+          },
+        }
+      : {}),
     metadataBase: new URL(siteUrl),
     title: {
       default: 'StaySecure360 — Security Education',
