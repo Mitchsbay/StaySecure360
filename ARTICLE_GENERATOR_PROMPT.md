@@ -2,18 +2,33 @@
 
 This is the live prompt pattern used by `/app/api/generate-article/route.ts`.
 
-The current generator is designed to produce an experienced, operational security voice without drifting into either of the two patterns that were making drafts look AI-assisted:
+The current generator is designed to produce an experienced, operational security voice without drifting into three patterns that were making drafts look AI-assisted:
 
 1. **Fake-gritty rant writing** — theatrical lines, grumpy character voice, and exaggerated war-story language.
 2. **Clean report/checklist writing** — one paragraph per category, neat transitions, and polished SEO conclusions.
+3. **Formal audit-report language** — accurate but stiff phrasing such as “access control point”, “unauthorized access”, “cumulative failures”, and “layered approach”.
 
-The aim is a middle path: practical, factual, field-informed, direct, and credible.
+The aim is a middle path: practical, factual, field-informed, direct, plainspoken, and credible.
 
 ## Core writing philosophy
 
 The article should read like someone explaining what they regularly see during inspections, incident reviews, control room work, site walks, audits, or client conversations.
 
 The point is not to sound "gritty". The point is to sound observant, specific, and operationally credible.
+
+## Public article register
+
+V6 adds a plain-language field pass. The article should not sound like a formal audit report, assessment document, incident report, or compliance memo.
+
+The model is now instructed to write for an intelligent homeowner, business owner, facilities manager, or team leader who wants the practical truth without jargon. It should translate report language into plain practitioner language. For example:
+
+- "access control point" becomes "side gate", "rear door", or "place I check"
+- "unauthorized access" becomes "someone getting in"
+- "cumulative failures" becomes "small problems stacking up"
+- "layered approach" becomes "the rest of the setup"
+- "vulnerability" becomes "weak spot"
+
+The reader should feel like a practitioner is walking them through what they would notice on site, not reading findings from an assessment template.
 
 ## Voice and tone
 
@@ -42,6 +57,8 @@ The visible article body should:
 - prefer precise observations over attitude
 - avoid recapping what was already said
 - end on a practical warning, unresolved risk, or grounded observation
+- avoid repeated field-observation openings such as "A common issue", "A common failure", "I often find", "I often encounter", "I often observe", "Frequently", or "In many cases"
+- keep the language plain enough that it could be said to a client during a site walk
 
 The strengthened narrowing rule now tells the model that a strong article is not comprehensive. For residential perimeter pieces, the default route is usually: side/rear gate → rear sliding door or rear access point → camera/alarm confidence gap → maintenance or household habit. Extra issues such as windows, lighting, landscaping, rentals, locks, codes, fences, and behaviour should not all receive standalone paragraphs in one article.
 
@@ -66,6 +83,7 @@ The visible article body should not contain:
 - forced FAQ or checklist sections
 - one paragraph per category
 - repeated paragraph openings such as "Windows are...", "Windows behind...", "CCTV coverage...", "Alarm systems...", "Lighting plays...", "Lastly...", "Landscaping...", "For rental properties...", or "Practical perimeter security means..."
+- repeated inspection phrases such as "A common issue...", "A common failure...", "I often find...", "I often encounter...", "I often observe...", "Frequently...", "In many cases...", or "In some cases..."
 
 Checklist and FAQ fields can still be returned as JSON metadata for the CMS. They should not be forced into the public article body unless specifically requested by the user.
 
@@ -118,6 +136,25 @@ The system prompt also bans phrases such as:
 - "enough with the excuses"
 - "come on in"
 
+## Banned formal report / audit phrases
+
+V6 also avoids public-article phrasing that is technically correct but too stiff or assessment-like. The system prompt now discourages phrases such as:
+
+- "access control point"
+- "unauthorized access" / "unauthorised access"
+- "cumulative failures"
+- "layered approach"
+- "risk controls"
+- "perimeter defenses" / "perimeter defences"
+- "deterrence value"
+- "security posture"
+- "formal assessment"
+- "mitigation strategy"
+- "nullify front-door security measures"
+- "practical perimeter security means"
+
+The generator should use plain alternatives unless the user specifically asks for a formal report.
+
 ## Technical accuracy rules
 
 The prompt now pushes ordinary, realistic failure modes instead of questionable specialist claims.
@@ -161,9 +198,11 @@ The prompt specifically bans SEO-style link sentences such as:
 The generator now has two levels of control:
 
 1. **System prompt control** — the model is instructed to write in the operational voice above.
-2. **Post-generation validation and optional rewrite** — the backend validates the draft and can run a second rewrite pass if the article contains AI/fake-grit phrases, polished conclusion patterns, obvious template structure, forced internal links, headings, bullets, report-like category openings, or scope drift caused by too many standalone issue areas.
+2. **Post-generation validation and optional rewrite** — the backend validates the draft and can run a second rewrite pass if the article contains AI/fake-grit phrases, polished conclusion patterns, obvious template structure, forced internal links, headings, bullets, report-like category openings, repetitive field phrasing, formal audit/report language, or scope drift caused by too many standalone issue areas.
 
 This means the article generator is not relying only on the user prompt box. The server now pushes drafts back toward a practitioner-style narrative before returning them to the CMS.
+
+V6 specifically adds a plain-language rewrite requirement so a focused article does not over-correct into a formal inspection report.
 
 ## Structure mode
 

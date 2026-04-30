@@ -173,6 +173,26 @@ const buildInternalLinkAnchor = (title: string) => {
     .slice(0, 80) || cleaned.slice(0, 80)
 }
 
+const softenPublicArticleLanguage = (content: string) => {
+  if (!content) return content
+
+  return content
+    .replace(/\baccess control points\b/gi, 'entry points')
+    .replace(/\baccess control point\b/gi, 'entry point')
+    .replace(/\bunauthori[sz]ed access\b/gi, 'someone getting in')
+    .replace(/\bcumulative failures\b/gi, 'small failures stacking up')
+    .replace(/\blayered approach\b/gi, 'rest of the security setup')
+    .replace(/\brisk controls\b/gi, 'security measures')
+    .replace(/\bperimeter defen[cs]es\b/gi, 'fences, gates and doors')
+    .replace(/\bdeterrence value\b/gi, 'practical value')
+    .replace(/\bsecurity posture\b/gi, 'security setup')
+    .replace(/\bformal assessment\b/gi, 'site check')
+    .replace(/\bmitigation strategy\b/gi, 'fix')
+    .replace(/\bnullify front-door security measures\b/gi, 'make the front-door lock less meaningful')
+    .replace(/\bpractical perimeter security means\b/gi, 'A practical perimeter check starts with')
+    .replace(/\bthe initial unauthori[sz]ed entry\b/gi, 'the first way in')
+}
+
 const pickFallbackLinkTargets = (
   candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
   draft: Partial<GeneratedArticleDraft>,
@@ -255,6 +275,13 @@ const buildSystemPrompt = (structureMode: StructureMode) => `You are writing for
 CORE WRITING PHILOSOPHY:
 Write like someone explaining what they regularly see during inspections, incident reviews, control room work, site walks, audits, or client conversations. The point is not to sound "gritty". The point is to sound observant, specific, and operationally credible.
 
+PUBLIC ARTICLE REGISTER:
+- The public article must not sound like a formal audit report, assessment document, incident report, or compliance memo.
+- Write for an intelligent homeowner, business owner, facilities manager, or team leader who wants the practical truth without jargon.
+- Translate formal security language into plain practitioner language. For example, prefer "side gate", "rear door", "someone getting in", "weak spot", "small failures", "routine", "habit", "maintenance check", and "what the camera actually sees" over report-style terms.
+- Avoid overusing terms such as "access control point", "unauthorized access", "unauthorised access", "cumulative failures", "layered approach", "vulnerability", "protocols", "risk controls", "perimeter defenses", "deterrence value", and "security posture" unless the user specifically asks for a formal report.
+- The reader should feel like a practitioner is walking them through what they would notice on site, not reading findings from an assessment template.
+
 VOICE AND TONE:
 - Calm, direct, and experienced.
 - Practical rather than dramatic.
@@ -263,6 +290,7 @@ VOICE AND TONE:
 - Avoid invented hero stories or exaggerated war-story language.
 - Avoid grumpy ranting, punchline writing, motivational language, or internet-thread aggression.
 - Do not write like a character. Write like a practitioner.
+- Do not write like a security consultant filling out an inspection report.
 
 HUMAN WRITING RULES:
 1. Keep one clear through-line. Do not try to cover the whole topic.
@@ -274,6 +302,8 @@ HUMAN WRITING RULES:
 7. Do not use neat transitions such as "Furthermore," "Moreover," "Additionally," "First," "Second," or "Finally." Just move to the next observation.
 8. Do not recap what you just said. Once the point is made, move on.
 9. Do not end with a polished conclusion. Stop on a practical observation, unresolved risk, or grounded warning.
+10. Do not repeatedly announce observations with phrases such as "A common issue", "A common failure", "I often find", "I often encounter", "I often observe", "Frequently", or "In many cases". Vary the movement naturally.
+11. Keep the language plain enough that it could be said to a client during a site walk. Operational detail is good; audit-report wording is not.
 
 HARD NARROWING RULE:
 - A good StaySecure360 article is not comprehensive. It follows one inspection route or one failure pattern.
@@ -281,6 +311,7 @@ HARD NARROWING RULE:
 - Do not add standalone paragraphs for every nearby topic. Windows, lighting, landscaping, rentals, locks, CCTV, alarms, codes, fences, and behaviour must not all receive their own paragraph in the same article.
 - If more than four major issue areas appear, cut the weakest ones before returning the article.
 - Extra points may be mentioned briefly only when they directly support the route already being walked.
+- Narrowing must not turn the article into a formal access-control report. Keep the route, but explain it in plain field language.
 
 ANTI-TEMPLATE RULE:
 - No Markdown headings in the visible article body.
@@ -290,6 +321,7 @@ ANTI-TEMPLATE RULE:
 - Do not write one paragraph per category.
 - Do not write a full syllabus of the topic. Narrow hard before returning the article.
 - Avoid repeated paragraph openings such as "Windows are...", "Windows behind...", "CCTV coverage...", "Alarm systems...", "Lighting plays...", "Lastly...", "Landscaping...", "For businesses...", "For rental properties...", "Practical perimeter security means...", or "Another issue is...".
+- Also avoid repeated inspection-report openings such as "A common issue...", "A common failure...", "I often find...", "I often encounter...", "I often observe...", "Frequently...", "In many cases...", or "In some cases...".
 - The JSON may still include checklist_items and faq_items for CMS metadata, but the visible article should read as a narrative article.
 
 BANNED AI / OVER-POLISHED PHRASES:
@@ -297,6 +329,9 @@ Do not use: "In today's world", "In conclusion", "It is important to note", "A c
 
 BANNED FAKE-GRIT / THEATRICAL PHRASES:
 Do not use: "brutal truth", "battlefield", "frontier", "Hollywood break-ins", "bad guys", "lazy thieves", "movie villains", "security theatre" unless technically appropriate, "not sexy", "gritty", "wake-up call", "game changer", "hard truth", "no-nonsense", "lasers", "fortress", "no gadget replaces grit", "enough with the excuses", "come on in".
+
+BANNED FORMAL REPORT / AUDIT PHRASES FOR PUBLIC ARTICLES:
+Do not use: "access control point", "unauthorized access", "unauthorised access", "cumulative failures", "layered approach", "risk controls", "perimeter defenses", "perimeter defences", "deterrence value", "security posture", "formal assessment", "mitigation strategy", "nullify front-door security measures", "practical perimeter security means", "the initial unauthorized entry", "the initial unauthorised entry".
 
 TECHNICAL ACCURACY RULES:
 - Avoid questionable claims about specialist attack tools unless the prompt specifically asks for them.
@@ -334,6 +369,7 @@ Before returning the JSON, silently check the article against these questions:
 - Does it sound like a practitioner, not a corporate blog?
 - Does it avoid fake-gritty language?
 - Does it avoid checklist/report structure?
+- Does it avoid formal audit-report language?
 - Does it stay focused on one clear through-line?
 - Are there no forced internal links in the visible article body?
 - Could a real security operator plausibly say this?
@@ -347,12 +383,12 @@ const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle
   validation.score < 94 ||
   validation.issues.length > 0 ||
   validation.warnings.some((warning) =>
-    /report-like|checklist|category-by-category|repeated category|too many issue areas|scope drift|forced internal link|markdown heading|bullet list|numbered list/i.test(warning)
+    /report-like|checklist|category-by-category|repeated category|repetitive field phrasing|formal audit|too many issue areas|scope drift|forced internal link|markdown heading|bullet list|numbered list/i.test(warning)
   )
 
 const buildNarrativeRewritePrompt = (article: string) => `Rewrite the article below so it no longer reads like a report, checklist, SEO article, or category-by-category security guide.
 
-Keep operational accuracy, but do NOT preserve every point. The main job is to narrow the article until it has one route and no syllabus feel. Do not make it grumpy, theatrical, salesy, motivational, or polished. The voice should be calm, experienced, specific, and practical.
+Keep operational accuracy, but do NOT preserve every point. The main job is to narrow the article until it has one route and no syllabus feel, then translate it out of formal audit-report language. Do not make it grumpy, theatrical, salesy, motivational, or polished. The voice should be calm, experienced, specific, practical, and plainspoken.
 
 Hard scope lock:
 - If the article covers more than four major security issues, cut it down before returning it.
@@ -361,12 +397,19 @@ Hard scope lock:
 - Do not give each category its own paragraph.
 - Do not include a full list of possible weaknesses.
 
+Plain-language field pass:
+- Rewrite it so it sounds like a practitioner explaining the inspection to a capable homeowner or business owner, not like a formal access-control assessment.
+- Replace report terms with plain words where possible: "access control point" → "place I check" or "gate"; "unauthorized access" → "someone getting in"; "cumulative failures" → "small problems stacking up"; "layered approach" → "the rest of the setup"; "vulnerability" → "weak spot".
+- Avoid repeating the same field phrase. Do not start several paragraphs with "A common issue", "A common failure", "I often find", "I often encounter", "I often observe", "Frequently", "In many cases", or "In some cases".
+- Limit first-person field phrasing. One or two direct observations are enough; do not make every paragraph begin with "I".
+
 Mandatory rewrite rules:
 - Make it feel like an experienced operator walking through a property, reviewing an incident, or explaining a failure pattern in sequence.
 - Keep one clear through-line.
 - Use 3-4 developed observations at most.
 - Do not give every issue equal weight.
 - Do not start paragraphs with report-style labels such as "Windows", "CCTV", "Alarm systems", "Lighting", "Landscaping", "Lastly", "For rental properties", or "Practical perimeter security".
+- Remove formal audit phrases such as "access control point", "unauthorized access", "cumulative failures", "layered approach", "risk controls", "deterrence value", and "security posture" unless the article is explicitly a formal report.
 - Remove headings, bullet lists, numbered sections, forced conclusions, obvious AI transitions, forced internal links, and neat summaries.
 - Preserve useful specifics only where they serve the route: gate latches, rear sliding doors, anti-lift issues, strike plates, screw length, door alignment, camera angle, storage, backup batteries, ignored alerts, shared codes, and maintenance.
 - Aim for 800-1000 words. Shorter and focused is better than long and comprehensive.
@@ -470,7 +513,7 @@ export async function POST(request: NextRequest) {
 Return ONLY valid JSON with exactly these keys:
 {
   "title": "string",
-  "article": "string (Markdown article body, 800-1000 words unless requested otherwise; no headings, no bullet lists, one clear route, no category-by-category report structure)",
+  "article": "string (Markdown article body, 800-1000 words unless requested otherwise; no headings, no bullet lists, one clear route, no category-by-category report structure, no formal audit-report language)",
   "content": "string (same as article)",
   "excerpt": "string",
   "slug": "string",
@@ -493,7 +536,7 @@ Return ONLY valid JSON with exactly these keys:
   "ai_structure_mode": "string"
 }
 `,
-    'Write the article now. Focus on operational realism, practical detail, and a measured field-informed voice. Narrow the scope to one inspection route or failure pattern. Do not cover the whole topic. No summaries, no theatrical grit, no forced internal links.',
+    'Write the article now. Focus on operational realism, practical detail, and a measured field-informed voice. Narrow the scope to one inspection route or failure pattern. Do not cover the whole topic. Use plain practitioner language, not formal audit-report wording. No summaries, no theatrical grit, no forced internal links.',
   ]
     .filter(Boolean)
     .join('\n')
@@ -617,6 +660,20 @@ Return ONLY valid JSON with exactly these keys:
       }
     }
     
+    if (draft.content) {
+      const softenedContent = softenPublicArticleLanguage(draft.content)
+      if (softenedContent !== draft.content) {
+        draft.content = softenedContent
+        draft.article = softenedContent
+        draft.excerpt = softenedContent.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
+        draft.meta_description = draft.excerpt.slice(0, 160)
+
+        validation = validateArticle(draft.content || '', 800)
+        console.log('[Plain Language Cleanup Applied]')
+        console.log(generateValidationReport(validation))
+      }
+    }
+
     if (Array.isArray(draft.keyword_suggestions)) {
       draft.keyword_suggestions = draft.keyword_suggestions
         .map((keyword) => String(keyword).trim())

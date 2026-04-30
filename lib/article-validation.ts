@@ -94,6 +94,22 @@ const BANNED_PHRASES = [
   'plays a silent but crucial role',
   'a frequent misstep',
   'as important as locks and alarms',
+  'access control point',
+  'unauthorized access',
+  'unauthorised access',
+  'cumulative failures',
+  'layered approach',
+  'risk controls',
+  'perimeter defenses',
+  'perimeter defences',
+  'deterrence value',
+  'security posture',
+  'formal assessment',
+  'mitigation strategy',
+  'nullify front-door security measures',
+  'practical perimeter security means',
+  'the initial unauthorized entry',
+  'the initial unauthorised entry',
 ]
 
 /**
@@ -234,6 +250,68 @@ export function detectScopeDrift(content: string): boolean {
 }
 
 /**
+ * Detect repetitive field-observation openings that make a draft feel generated
+ * even when the content itself is operationally accurate.
+ */
+export function getRepetitiveFieldOpenings(content: string): string[] {
+  if (!content) return []
+
+  const paragraphs = content
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+
+  const repeatedOpeners = [
+    /^a\s+common\s+(issue|failure|problem|weakness)\b/i,
+    /^i\s+often\s+(find|see|encounter|observe|come\s+across)\b/i,
+    /^i\s+regularly\s+(find|see|encounter|observe|come\s+across)\b/i,
+    /^frequently\b/i,
+    /^in\s+many\s+cases\b/i,
+    /^in\s+some\s+cases\b/i,
+    /^many\s+(homes|sites|properties|businesses)\b/i,
+  ]
+
+  return paragraphs
+    .filter((paragraph) => repeatedOpeners.some((pattern) => pattern.test(paragraph)))
+    .map((paragraph) => paragraph.split(/\s+/).slice(0, 7).join(' '))
+}
+
+export function detectRepetitiveFieldOpenings(content: string): boolean {
+  return getRepetitiveFieldOpenings(content).length >= 3
+}
+
+/**
+ * Detect formal audit/report register in public article copy. Some technical terms are
+ * fine in moderation, but repeated report language makes the piece feel templated.
+ */
+export function getFormalAuditTerms(content: string): string[] {
+  if (!content) return []
+
+  const lowerContent = content.toLowerCase()
+  const terms = [
+    'access control point',
+    'unauthorized access',
+    'unauthorised access',
+    'cumulative failures',
+    'layered approach',
+    'risk controls',
+    'perimeter defenses',
+    'perimeter defences',
+    'deterrence value',
+    'security posture',
+    'formal assessment',
+    'mitigation strategy',
+    'practical perimeter security means',
+  ]
+
+  return terms.filter((term) => lowerContent.includes(term))
+}
+
+export function detectFormalAuditLanguage(content: string): boolean {
+  return getFormalAuditTerms(content).length >= 1
+}
+
+/**
  * Detect forced or SEO-style internal link placement.
  */
 export function detectForcedInternalLinks(content: string): boolean {
@@ -287,8 +365,12 @@ export function validateArticle(content: string, minWords: number = 850): Valida
   const headingCount = countSectionHeadings(content)
   const listMarkerCount = countListMarkers(content)
   const reportLikeOpenings = getReportLikeParagraphOpenings(content)
+  const repetitiveFieldOpenings = getRepetitiveFieldOpenings(content)
+  const formalAuditTerms = getFormalAuditTerms(content)
   const hasReportLikeStructure = detectReportLikeStructure(content)
   const hasScopeDrift = detectScopeDrift(content)
+  const hasRepetitiveFieldOpenings = detectRepetitiveFieldOpenings(content)
+  const hasFormalAuditLanguage = detectFormalAuditLanguage(content)
   const hasForcedInternalLinks = detectForcedInternalLinks(content)
 
   if (wordCount < minWords) {
@@ -323,6 +405,14 @@ export function validateArticle(content: string, minWords: number = 850): Valida
     warnings.push(`Article shows scope drift / too many issue areas for one human-style article: ${reportLikeOpenings.join(' | ')}`)
   }
 
+  if (hasRepetitiveFieldOpenings) {
+    warnings.push(`Article uses repetitive field phrasing and may feel generated: ${repetitiveFieldOpenings.join(' | ')}`)
+  }
+
+  if (hasFormalAuditLanguage) {
+    warnings.push(`Article uses formal audit/report language for a public article: ${formalAuditTerms.join(' | ')}`)
+  }
+
   if (hasForcedInternalLinks) {
     warnings.push('Article appears to contain forced internal link placement')
   }
@@ -336,6 +426,8 @@ export function validateArticle(content: string, minWords: number = 850): Valida
   score -= listMarkerCount * 4
   score -= hasReportLikeStructure ? 18 : 0
   score -= hasScopeDrift ? 18 : 0
+  score -= hasRepetitiveFieldOpenings ? 12 : 0
+  score -= hasFormalAuditLanguage ? 12 : 0
   score -= hasForcedInternalLinks ? 12 : 0
 
   score = Math.max(0, Math.min(100, score))
