@@ -1,8 +1,5 @@
 // ============================================================
 // /api/generate-article — Server-side OpenAI article generation
-//
-// REQUIRED ENVIRONMENT VARIABLES:
-// OPENAI_API_KEY — Your OpenAI API key (server-side only)
 // ============================================================
 
 export const dynamic = 'force-dynamic'
@@ -88,11 +85,7 @@ const contentClusterMap: Record<string, { pillar: string; cluster: string }> = {
   'Social Engineering': { pillar: 'Social Engineering', cluster: 'social-engineering-patterns' },
 }
 
-const toneModes = [
-  'operational and realistic',
-  'direct but measured',
-  'field-note practical',
-]
+const toneModes = ['operational and realistic', 'direct but measured', 'field-note practical']
 
 const stableHash = (input: string) =>
   Array.from(input).reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) >>> 0, 7)
@@ -131,19 +124,15 @@ const parseInternalLinks = (value: unknown): InternalLinkTarget[] => {
     .slice(0, 3)
 }
 
-const cleanInternalLinkTitle = (title: string) =>
-  String(title || '').replace(/^to\s+/i, '').replace(/\s+/g, ' ').trim()
-
 const enforceInternalLinkInjection = (
   draft: GeneratedArticleDraft & { internal_links?: InternalLinkTarget[]; internal_link_targets?: InternalLinkTarget[] },
   candidates: Array<{ title: string; slug: string; excerpt?: string | null }>,
   prompt: string
 ) => {
   if (!draft.content || candidates.length === 0) return draft
-
   const targets = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
-  draft.internal_links = targets.length > 0 ? targets : []
-  draft.internal_link_targets = targets.length > 0 ? targets : []
+  draft.internal_links = targets
+  draft.internal_link_targets = targets
   return draft
 }
 
@@ -154,66 +143,60 @@ const getErrorMessage = (err: unknown, fallback = 'Article generation failed') =
 }
 
 // ============================================================
-// TIGHTER MASTER SYSTEM PROMPT (Refined based on latest output)
+// TIGHTER MASTER SYSTEM PROMPT v3 (Refined for latest output)
 // ============================================================
 const buildSystemPrompt = (structureMode: StructureMode) => `
 You are a seasoned security operator writing for StaySecure360. 
-Write like someone who has done hundreds of real site inspections and risk assessments — calm, direct, specific, and practical. No marketing tone, no motivational language, no polished corporate phrasing.
+Write like a practical, experienced practitioner who has done hundreds of real site inspections — calm, direct, specific, and slightly rough around the edges. No marketing voice, no corporate polish, no motivational language.
 
-STRICT WRITING RULES:
-- Focus on 3–4 concrete mechanical failures. Explain how they actually fail in practice.
-- Write as a natural, flowing narrative — like you're walking the property and pointing things out as you go.
-- Vary sentence starters strongly. Never use repetitive patterns like "One frequent...", "Another frequent issue...", "Equally concerning...", "I also observe...", "As I walk...".
-- Use "I" sparingly and only when it feels natural. Avoid overusing "I often encounter", "I frequently find", "During my assessments".
-- Prefer raw mechanical details (short screws in strike plates, missing anti-lift pins, dirty lenses, dead batteries, unlatched gates) over general statements.
+STRICT RULES:
+- Focus on 3–4 concrete mechanical failures. Describe how they actually fail with specific details.
+- Write as a natural, flowing narrative — like you're walking the property and commenting on what you notice.
+- Strongly vary every paragraph starter. Never use predictable patterns like "Next,", "Moving to,", "Additionally,", "Furthermore,", "Finally,", "Another area of concern".
+- Use "I" sparingly and only when it feels natural. Avoid repetitive phrases like "I often encounter", "I frequently find", "During my assessments".
+- Prefer raw mechanical observations over general statements.
 
-BANNED PHRASES & PATTERNS — NEVER USE:
-- "One frequent sight", "Equally concerning", "Another frequent issue", "I also observe", "As I walk through"
-- "rendering... useless", "substantially enhance", "proactive maintenance schedule", "create a more resilient defense", "stack up", "lead to significant security failures"
-- "false sense of security", "chain of vulnerabilities", "more often than not"
-- Mechanical transitions: "Moreover", "Additionally", "Equally", "Another"
+BANNED PATTERNS & PHRASES — NEVER USE:
+- "the first thing that stands out", "Next,", "Moving to", "Additionally,", "Furthermore,", "Finally,", "Another frequent", "Equally concerning", "I also observe"
+- "rendering... ineffective", "dramatically improve", "significantly enhance", "alarmingly easy", "straightforward fix", "the impact is significant"
+- "these mechanical failures represent", "tangible weaknesses", "more often than not"
 
 OPENING:
-Start with a specific, grounded observation from the field.
+Start directly with a specific, grounded observation.
 
 ENDING:
-End on a quiet, practical note or testable observation. No summaries, no conclusions, no motivational closes.
+Stop on a quiet, practical note or observation. No summaries or conclusions.
 
 SELF-CHECK BEFORE OUTPUTTING:
-- Does this read like a real person walking and talking through a property?
-- Are the paragraph starters varied and natural?
-- Is there any checklist-like or systematic structure?
-- Have I avoided all banned phrases?
+- Does this flow like a real person walking and talking through a property?
+- Are paragraph starters varied and natural?
+- Does it feel like genuine field observations rather than a structured report?
+- Have I avoided all banned phrases and list-like progression?
 
 Current structure mode: ${structureMode}
-Return ONLY valid JSON matching the exact schema in the user prompt.
+Return ONLY valid JSON matching the schema provided in the user prompt.
 `
 
 const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle>) =>
   validation.score < 90 ||
   validation.issues.length > 0 ||
-  validation.warnings.some((w) =>
-    /report-like|checklist|repetitive|category-by-category|forced|heading|bullet|transition/i.test(w)
+  validation.warnings.some((warning) =>
+    /report-like|checklist|repetitive|category|transition|heading|bullet|list-like/i.test(warning)
   )
 
-const buildNarrativeRewritePrompt = (article: string) => `Rewrite this article to sound more natural and less like structured AI content.
+const buildNarrativeRewritePrompt = (article: string) => `Rewrite the article below to sound like natural, spoken field observations from an experienced security operator.
 
-Keep all factual details and mechanical observations, but make the flow feel like a seasoned operator casually walking the property and explaining what they see.
+Make the flow conversational and human. Remove all list-like structure, predictable transitions ("Next", "Additionally", "Finally"), and any corporate or polished language.
 
-Rules:
-- Make paragraph starters varied and human.
-- Remove any repetitive or list-like structure.
-- Eliminate corporate or polished phrasing.
-- Keep it calm, specific, and practical.
-- End on a grounded observation, not a conclusion.
+Keep the core mechanical observations but make them feel authentic and specific. Vary sentence rhythm and paragraph starters significantly.
 
 Return ONLY this JSON:
 {
-  "article": "fully rewritten article",
+  "article": "the fully rewritten article",
   "content": "same as article"
 }
 
-Article:
+Article to rewrite:
 ${article}
 `
 
@@ -223,9 +206,9 @@ export async function POST(request: NextRequest) {
       apiKey: process.env.OPENAI_API_KEY ?? '',
     })
 
+    // Auth check
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
-
     if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
     const adminClient = createAdminClient()
@@ -239,7 +222,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const body = await request.json()
+    const body: GenerateArticleRequest = await request.json()
     const { prompt, audience, tone, topic, keywords } = body
 
     if (!prompt?.trim()) {
@@ -265,9 +248,9 @@ export async function POST(request: NextRequest) {
       .from('articles')
       .select('title, slug, excerpt')
       .eq('status', 'published')
-      .limit(6)
+      .limit(8)
 
-    const linkCandidates = (existingArticles ?? []).map(a => ({
+    const linkCandidates = (existingArticles ?? []).map((a) => ({
       title: String(a.title),
       slug: String(a.slug).replace(/^\/+|\/+$/g, ''),
       excerpt: a.excerpt ? String(a.excerpt) : null,
@@ -276,14 +259,15 @@ export async function POST(request: NextRequest) {
     const systemPrompt = buildSystemPrompt(structureMode)
 
     const userPrompt = [
-      audience ? `TARGET AUDIENCE: ${audience}` : '',
-      `TONE: ${appliedTone}`,
-      topic ? `CATEGORY GUIDANCE: ${topic}` : '',
-      taxonomy ? `AVAILABLE TOPICS:\n${taxonomy}` : '',
-      `RECOMMENDED CLUSTER: ${requestedCluster.cluster}`,
-      keywords ? `KEYWORDS: ${keywords}` : '',
-      `STRUCTURE MODE: ${structureMode}`,
-      `Return ONLY valid JSON with these exact keys: title, article, content, excerpt, slug, meta_title, meta_description, image_prompt, category, subcategory, topic_id, includeChecklist, includeFAQ, key_takeaways, checklist_items, faq_items, suggested_topic, keyword_suggestions, content_cluster, pillar_topic, internal_links, ai_structure_mode`,
+      `Topic: ${prompt}`,
+      audience ? `Audience: ${audience}` : '',
+      `Tone: ${appliedTone}`,
+      topic ? `Category guidance: ${topic}` : '',
+      taxonomy ? `Available topics:\n${taxonomy}` : '',
+      `Recommended cluster: ${requestedCluster.cluster}`,
+      keywords ? `Keywords: ${keywords}` : '',
+      `Structure mode: ${structureMode}`,
+      'Return ONLY valid JSON with these exact keys: title, article, content, excerpt, slug, meta_title, meta_description, image_prompt, category, subcategory, topic_id, includeChecklist, includeFAQ, key_takeaways, checklist_items, faq_items, suggested_topic, keyword_suggestions, content_cluster, pillar_topic, internal_links, ai_structure_mode',
     ].filter(Boolean).join('\n')
 
     const completion = await openai.chat.completions.create({
@@ -292,24 +276,24 @@ export async function POST(request: NextRequest) {
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.73,
+      temperature: 0.71,
       max_tokens: 4000,
       response_format: { type: 'json_object' },
     })
 
-    let draft = JSON.parse(completion.choices[0]?.message?.content || '{}') as GeneratedArticleDraft & any
+    let draft = JSON.parse(completion.choices[0]?.message?.content || '{}') as any
 
     draft.content = draft.content || draft.article || ''
     draft.article = draft.article || draft.content
 
     if (!draft.slug) draft.slug = generateSlug(draft.title || 'untitled')
     if (!draft.meta_title) draft.meta_title = (draft.title || '').slice(0, 60)
-    if (!draft.excerpt) {
+    if (!draft.excerpt && draft.content) {
       draft.excerpt = draft.content.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
     }
-    if (!draft.meta_description) draft.meta_description = draft.excerpt
+    if (!draft.meta_description) draft.meta_description = draft.excerpt || ''
 
-    // Topic resolution
+    // Topic matching
     const topicCandidates = (availableTopics ?? []) as TopicCandidate[]
     const matchedTopic = findBestTopic(topicCandidates, [draft.subcategory, draft.suggested_topic, draft.category, topic, prompt])
     if (matchedTopic) draft.topic_id = matchedTopic.id
@@ -320,7 +304,7 @@ export async function POST(request: NextRequest) {
 
     draft = enforceInternalLinkInjection(draft, linkCandidates, prompt)
 
-    // Validation & optional rewrite
+    // Validation + rewrite
     let validation = validateArticle(draft.content || '', 950)
     console.log(generateValidationReport(validation))
 
@@ -332,26 +316,26 @@ export async function POST(request: NextRequest) {
             { role: 'system', content: buildSystemPrompt('article_only') },
             { role: 'user', content: buildNarrativeRewritePrompt(draft.article || draft.content) },
           ],
-          temperature: 0.68,
+          temperature: 0.65,
           max_tokens: 3500,
           response_format: { type: 'json_object' },
         })
 
         const rewritten = JSON.parse(rewriteCompletion.choices[0]?.message?.content || '{}')
-        if (rewritten.article && countWords(rewritten.article) > 800) {
+        if (rewritten.article && countWords(rewritten.article) > 850) {
           draft.article = rewritten.article
           draft.content = rewritten.article
           console.log('[Narrative Rewrite Applied]')
         }
       } catch (e) {
-        console.warn('Rewrite failed:', e)
+        console.warn('Narrative rewrite skipped:', e)
       }
     }
 
     return NextResponse.json({ draft })
 
   } catch (err: unknown) {
-    console.error('Article generation error:', err)
+    console.error('/api/generate-article error:', err)
     return NextResponse.json({ error: getErrorMessage(err) }, { status: 500 })
   }
 }
