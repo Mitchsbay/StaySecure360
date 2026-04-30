@@ -181,9 +181,9 @@ If discussing deadbolts, the model should distinguish between the lock body, str
 
 ## Internal linking rules
 
-The backend no longer forcibly injects contextual `/articles/...` links into the article body.
+The backend now allows contextual internal linking again, but not in the old SEO-sentence style. It can add 1-2 links by linking an existing phrase that already belongs in the sentence, such as `CCTV coverage`, `side gate`, `rear sliding door`, or `alarm sensors`.
 
-The API still returns `internal_links` metadata so the site can display related reading separately. An editor can still add contextual body links manually where they genuinely fit.
+The API still returns `internal_links` metadata so the site can display related reading separately. An editor can still adjust contextual body links manually where needed.
 
 The prompt specifically bans SEO-style link sentences such as:
 
@@ -202,7 +202,7 @@ The generator now has two levels of control:
 
 This means the article generator is not relying only on the user prompt box. The server now pushes drafts back toward a practitioner-style narrative before returning them to the CMS.
 
-V6 specifically adds a plain-language rewrite requirement so a focused article does not over-correct into a formal inspection report.
+V6 specifically adds a plain-language rewrite requirement so a focused article does not over-correct into a formal inspection report. V6.1 restores natural internal linking and fixes the article-page excerpt display so the generated excerpt does not look like an oversized first paragraph when it duplicates the article opening.
 
 ## Structure mode
 

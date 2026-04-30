@@ -234,6 +234,89 @@ const pickFallbackLinkTargets = (
     }))
 }
 
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const candidateLooksLike = (
+  target: InternalLinkTarget,
+  patterns: RegExp[]
+) => {
+  const text = `${target.title} ${target.slug} ${target.anchor}`.toLowerCase()
+  return patterns.some((pattern) => pattern.test(text))
+}
+
+const getNaturalLinkPhrases = (target: InternalLinkTarget) => {
+  if (candidateLooksLike(target, [/cctv/, /camera/, /surveillance/])) {
+    return ['CCTV coverage', 'camera coverage', 'camera feeds', 'cameras', 'backyard cameras']
+  }
+
+  if (candidateLooksLike(target, [/perimeter/, /gate/, /fence/, /side-access/, /rear-access/])) {
+    return ['side gate', 'perimeter', 'rear gate', 'gate latch', 'backyard']
+  }
+
+  if (candidateLooksLike(target, [/human/, /behaviour/, /behavior/, /habit/, /culture/])) {
+    return ['household habits', 'human oversight', 'maintenance habits', 'small failures', 'security habits']
+  }
+
+  if (candidateLooksLike(target, [/sliding/, /door/, /lock/, /deadbolt/, /access-control/])) {
+    return ['rear sliding door', 'sliding doors', 'door locks', 'entry points', 'rear door']
+  }
+
+  if (candidateLooksLike(target, [/alarm/, /sensor/, /alert/, /notification/])) {
+    return ['alarm systems', 'alarm sensors', 'sensors', 'notifications']
+  }
+
+  return [target.anchor, cleanInternalLinkTitle(target.title)]
+}
+
+const replacePhraseWithLink = (paragraph: string, phrase: string, slug: string) => {
+  if (!phrase || paragraph.includes('](')) return { paragraph, changed: false }
+
+  const safeSlug = slug.replace(/^\/+|\/+$/g, '')
+  const regex = new RegExp(`\\b${escapeRegExp(phrase)}\\b`, 'i')
+
+  if (!regex.test(paragraph)) return { paragraph, changed: false }
+
+  return {
+    paragraph: paragraph.replace(regex, (match) => `[${match}](/articles/${safeSlug})`),
+    changed: true,
+  }
+}
+
+const applyNaturalInternalLinks = (
+  content: string,
+  targets: InternalLinkTarget[],
+  maxLinks = 2
+) => {
+  if (!content || targets.length === 0 || /\[[^\]]+\]\([^)]+\)/.test(content)) return content
+
+  const paragraphs = content.split(/\n{2,}/)
+  let linksAdded = 0
+
+  for (const target of targets.slice(0, maxLinks)) {
+    if (linksAdded >= maxLinks) break
+
+    const phrases = getNaturalLinkPhrases(target)
+
+    for (let paragraphIndex = 1; paragraphIndex < paragraphs.length; paragraphIndex += 1) {
+      if (linksAdded >= maxLinks) break
+
+      const paragraph = paragraphs[paragraphIndex]
+      if (!paragraph || paragraph.includes('](')) continue
+
+      for (const phrase of phrases) {
+        const result = replacePhraseWithLink(paragraph, phrase, target.slug)
+        if (result.changed) {
+          paragraphs[paragraphIndex] = result.paragraph
+          linksAdded += 1
+          break
+        }
+      }
+    }
+  }
+
+  return paragraphs.join('\n\n')
+}
 const enforceInternalLinkInjection = (
   draft: GeneratedArticleDraft & { article?: string; internal_links?: InternalLinkTarget[]; internal_link_targets?: InternalLinkTarget[] },
   candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
@@ -342,10 +425,10 @@ TECHNICAL ACCURACY RULES:
 - If discussing alarms and CCTV, focus on ordinary failure modes: dead backup batteries, disabled notifications, full storage, missed alerts, poor camera angles, dirty lenses, app access problems, nobody checking the system, shared codes, misaligned sensors, unlocked gates, poor lighting, and weak maintenance.
 
 INTERNAL LINK RULES:
-- Do not force internal links into the article body.
-- If a link fits naturally, use it sparingly and only where it belongs.
-- Prefer returning internal link targets in the internal_links metadata field so the site can display related reading separately.
-- Never interrupt a field observation with an SEO-style link sentence.
+- The visible article may include 1-2 internal links, but only by linking an existing natural phrase inside a relevant sentence.
+- Do not add separate SEO link sentences.
+- Prefer returning internal link targets in the internal_links metadata field as well, so the site can display related reading separately.
+- Never interrupt a field observation with a forced link sentence.
 - Never use phrases like "it's worth looking at", "for a broader look", "I often reference", "check out", or "the failure mode here is similar" just to place a link.
 
 LENGTH AND DEPTH:
@@ -536,7 +619,7 @@ Return ONLY valid JSON with exactly these keys:
   "ai_structure_mode": "string"
 }
 `,
-    'Write the article now. Focus on operational realism, practical detail, and a measured field-informed voice. Narrow the scope to one inspection route or failure pattern. Do not cover the whole topic. Use plain practitioner language, not formal audit-report wording. No summaries, no theatrical grit, no forced internal links.',
+    'Write the article now. Focus on operational realism, practical detail, and a measured field-informed voice. Narrow the scope to one inspection route or failure pattern. Do not cover the whole topic. Use plain practitioner language, not formal audit-report wording. No summaries, no theatrical grit, no forced SEO link sentences. Natural internal links are allowed only when they fit an existing phrase.',
   ]
     .filter(Boolean)
     .join('\n')
@@ -671,6 +754,17 @@ Return ONLY valid JSON with exactly these keys:
         validation = validateArticle(draft.content || '', 800)
         console.log('[Plain Language Cleanup Applied]')
         console.log(generateValidationReport(validation))
+      }
+    }
+
+    if (draft.content) {
+      const naturalLinkTargets = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
+      const linkedContent = applyNaturalInternalLinks(draft.content, naturalLinkTargets, 2)
+
+      if (linkedContent !== draft.content) {
+        draft.content = linkedContent
+        draft.article = linkedContent
+        console.log('[Natural Internal Links Applied]')
       }
     }
 
