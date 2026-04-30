@@ -14,7 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import OpenAI from 'openai'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { generateSlug } from '@/lib/utils'
-import { validateArticle, generateValidationReport } from '@/lib/article-validation'
+import { validateArticle, generateValidationReport, countWords } from '@/lib/article-validation'
 import type { GenerateArticleRequest, GeneratedArticleDraft, InternalLinkTarget } from '@/types'
 
 type StructureMode =
@@ -262,41 +262,48 @@ VOICE AND TONE:
 - Use "I" only when it genuinely helps the article feel like a field observation.
 - Avoid invented hero stories or exaggerated war-story language.
 - Avoid grumpy ranting, punchline writing, motivational language, or internet-thread aggression.
+- Do not write like a character. Write like a practitioner.
 
 HUMAN WRITING RULES:
 1. Keep one clear through-line. Do not try to cover the whole topic.
 2. Use 3-4 developed examples at most. Explain them properly instead of listing every possible issue.
-3. Vary sentence and paragraph length naturally, but do not force fragments every few lines.
-4. Prefer precise observations over attitude. A weak strike plate, an unlatched rear gate, a dead backup battery, or a camera pointing at the wrong area is stronger than a clever line.
-5. Do not use neat transitions such as "Furthermore," "Moreover," "Additionally," "First," "Second," or "Finally." Just move to the next observation.
-6. Do not recap what you just said. Once the point is made, move on.
-7. Do not end with a polished conclusion. Stop on a practical observation, unresolved risk, or grounded warning.
+3. Let the article move like a site walk, inspection, incident review, or operational explanation rather than a category-by-category report.
+4. Do not give every issue equal weight. Some observations can be short; others can carry the article.
+5. Vary sentence and paragraph length naturally, but do not force fragments every few lines.
+6. Prefer precise observations over attitude. A weak strike plate, an unlatched rear gate, a dead backup battery, or a camera pointing at the wrong area is stronger than a clever line.
+7. Do not use neat transitions such as "Furthermore," "Moreover," "Additionally," "First," "Second," or "Finally." Just move to the next observation.
+8. Do not recap what you just said. Once the point is made, move on.
+9. Do not end with a polished conclusion. Stop on a practical observation, unresolved risk, or grounded warning.
 
 ANTI-TEMPLATE RULE:
-- No Markdown headings in the article body.
-- No numbered sections.
-- No bullet lists in the article body.
-- No FAQ or checklist inside the article body unless explicitly requested by the user.
+- No Markdown headings in the visible article body.
+- No numbered sections in the visible article body.
+- No bullet lists in the visible article body.
+- No FAQ or checklist inside the visible article body unless explicitly requested by the user.
+- Do not write one paragraph per category.
+- Avoid repeated paragraph openings such as "Windows are...", "CCTV is...", "Alarm systems are...", "For businesses...", "For rental properties...", "Practical perimeter security means...", or "Another issue is...".
 - The JSON may still include checklist_items and faq_items for CMS metadata, but the visible article should read as a narrative article.
 
 BANNED AI / OVER-POLISHED PHRASES:
-Do not use: "In today's world", "In conclusion", "It is important to note", "A comprehensive approach", "Delve into", "Peace of mind", "Robust security", "The reality is", "When it comes to", "Crucial to consider", "Stay vigilant", "Culture of awareness", "The key takeaway", "Ultimately", "This article explores".
+Do not use: "In today's world", "In conclusion", "It is important to note", "A comprehensive approach", "Delve into", "Peace of mind", "Robust security", "The reality is", "When it comes to", "Crucial to consider", "Stay vigilant", "Culture of awareness", "The key takeaway", "Ultimately", "This article explores", "Furthermore", "Moreover", "Additionally", "First", "Second", "Finally".
 
-BANNED THEATRICAL / FAKE-GRIT PHRASES:
-Do not use: "Hollywood break-ins", "lasers", "battlefield", "frontier", "brutal truth", "wake-up call", "not good", "no gadget replaces grit", "enough with the excuses", "come on in", "security isn't sexy", "bad guys", "movie villains", "fortress", "lazy thieves".
+BANNED FAKE-GRIT / THEATRICAL PHRASES:
+Do not use: "brutal truth", "battlefield", "frontier", "Hollywood break-ins", "bad guys", "lazy thieves", "movie villains", "security theatre" unless technically appropriate, "not sexy", "gritty", "wake-up call", "game changer", "hard truth", "no-nonsense", "lasers", "fortress", "no gadget replaces grit", "enough with the excuses", "come on in".
 
 TECHNICAL ACCURACY RULES:
 - Avoid questionable claims about specialist attack tools unless the prompt specifically asks for them.
 - Do not mention RFID jammers, hacking gadgets, or sophisticated bypass methods in ordinary residential articles unless technically relevant and accurately explained.
+- Do not exaggerate how easy a bypass is unless the weakness described genuinely supports it.
 - If discussing a credit-card bypass, make clear it applies to loose spring latches or poor handle locks, not a properly thrown deadbolt.
 - If discussing deadbolts, distinguish between the lock body, the strike plate, the frame, screw length, and door alignment.
-- If discussing alarms and CCTV, focus on realistic failures: dead backup batteries, disabled notifications, full storage, missed alerts, poor camera angles, dirty lenses, app access problems, and nobody checking the system.
+- If discussing alarms and CCTV, focus on ordinary failure modes: dead backup batteries, disabled notifications, full storage, missed alerts, poor camera angles, dirty lenses, app access problems, nobody checking the system, shared codes, misaligned sensors, unlocked gates, poor lighting, and weak maintenance.
 
 INTERNAL LINK RULES:
 - Do not force internal links into the article body.
 - If a link fits naturally, use it sparingly and only where it belongs.
-- Never use phrases like "it's worth looking at", "for a broader look", "I often reference", or "the failure mode here is similar" just to place a link.
 - Prefer returning internal link targets in the internal_links metadata field so the site can display related reading separately.
+- Never interrupt a field observation with an SEO-style link sentence.
+- Never use phrases like "it's worth looking at", "for a broader look", "I often reference", "check out", or "the failure mode here is similar" just to place a link.
 
 LENGTH AND DEPTH:
 - Aim for 850-1100 words unless the user asks for a longer article.
@@ -304,13 +311,60 @@ LENGTH AND DEPTH:
 - If the article is getting long, narrow it. Do not add another example just to increase word count.
 
 OPENING RULE:
-Start with a specific operational observation, not a generic introduction and not a staged scene. Example style: "The first thing I usually check on a residential job is not the alarm panel. It is the side gate." That is specific without being theatrical.
+Start with a specific operational observation, not a generic introduction.
+Do not use the same opening pattern every time.
+Do not copy this example verbatim, but this is the type of opening expected:
+"The first thing I usually check on a residential job is not the alarm panel. It is the side gate."
 
 ENDING RULE:
-Do not end with a sales pitch, slogan, summary, or call-to-action. End with a practical warning or an observation the reader can test on their own property.
+Do not end with a sales pitch, slogan, summary, or call-to-action.
+End with a practical warning, unresolved risk, or an observation the reader can test on their own property.
+
+FINAL STYLE CHECK BEFORE RETURNING:
+Before returning the JSON, silently check the article against these questions:
+- Does it sound like a practitioner, not a corporate blog?
+- Does it avoid fake-gritty language?
+- Does it avoid checklist/report structure?
+- Does it stay focused on one clear through-line?
+- Are there no forced internal links in the visible article body?
+- Could a real security operator plausibly say this?
+
+If the answer to any of these is no, rewrite the article before returning it.
 
 Current structure mode: ${structureMode}
 Return ONLY valid JSON with the schema provided in the user prompt.`
+
+const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle>) =>
+  validation.score < 88 ||
+  validation.issues.length > 0 ||
+  validation.warnings.some((warning) =>
+    /report-like|checklist|category-by-category|repeated category|forced internal link|markdown heading|bullet list|numbered list/i.test(warning)
+  )
+
+const buildNarrativeRewritePrompt = (article: string) => `Rewrite the article below so it sounds less like a report, checklist, SEO article, or category-by-category security guide.
+
+Keep the factual content and operational accuracy. Do not make it grumpy, theatrical, salesy, motivational, or polished. The voice should be calm, experienced, specific, and practical.
+
+Mandatory rewrite rules:
+- Make it feel like an experienced operator walking through a property, reviewing an incident, or explaining a failure pattern in sequence.
+- Keep one clear through-line.
+- Use 3-4 developed observations at most rather than listing every possible weakness.
+- Do not give every issue equal weight.
+- Do not start repeated paragraphs with category labels such as "Windows are", "CCTV cameras", "Alarm systems", "For rental properties", or "Practical perimeter security means".
+- Remove headings, bullet lists, numbered sections, forced conclusions, obvious AI transitions, and forced internal links.
+- Preserve useful specifics such as gate latches, rear sliding doors, strike plates, screw length, door alignment, camera angle, storage, backup batteries, codes, and maintenance where they are relevant.
+- End on a practical observation or warning the reader can test, not a neat summary.
+
+Return ONLY valid JSON in this exact shape:
+{
+  "article": "rewritten article body",
+  "content": "same as article"
+}
+
+Article to rewrite:
+${article}
+`
+
 
 export async function POST(request: NextRequest) {
   try {
@@ -503,9 +557,48 @@ Return ONLY valid JSON with exactly these keys:
 
     draft = enforceInternalLinkInjection(draft, linkCandidates, prompt)
 
-    // POST-GENERATION VALIDATION
-    const validation = validateArticle(draft.content || '', 850)
+    // POST-GENERATION VALIDATION + OPTIONAL BACKEND STYLE REWRITE
+    let validation = validateArticle(draft.content || '', 850)
     console.log(generateValidationReport(validation))
+
+    if (shouldRunNarrativeRewrite(validation) && draft.content) {
+      try {
+        const rewriteCompletion = await openai.chat.completions.create({
+          model: 'gpt-4.1-mini',
+          messages: [
+            { role: 'system', content: buildSystemPrompt('article_only') },
+            { role: 'user', content: buildNarrativeRewritePrompt(draft.content) },
+          ],
+          temperature: 0.74,
+          max_tokens: 3600,
+          response_format: { type: 'json_object' },
+        })
+
+        const rewriteRaw = rewriteCompletion.choices[0]?.message?.content
+
+        if (rewriteRaw) {
+          const rewritten = JSON.parse(rewriteRaw) as {
+            article?: string
+            content?: string
+          }
+
+          const rewrittenContent = rewritten.content || rewritten.article
+
+          if (rewrittenContent && countWords(rewrittenContent) >= 750) {
+            draft.content = rewrittenContent
+            draft.article = rewrittenContent
+            draft.excerpt = rewrittenContent.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
+            draft.meta_description = draft.excerpt.slice(0, 160)
+
+            validation = validateArticle(draft.content || '', 850)
+            console.log('[Narrative Rewrite Applied]')
+            console.log(generateValidationReport(validation))
+          }
+        }
+      } catch (rewriteErr) {
+        console.warn('Narrative rewrite skipped:', rewriteErr)
+      }
+    }
     
     if (Array.isArray(draft.keyword_suggestions)) {
       draft.keyword_suggestions = draft.keyword_suggestions
