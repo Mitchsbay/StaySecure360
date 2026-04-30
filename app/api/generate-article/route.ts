@@ -12,7 +12,11 @@ import { generateSlug } from '@/lib/utils'
 import { validateArticle, generateValidationReport, countWords } from '@/lib/article-validation'
 import type { GenerateArticleRequest, GeneratedArticleDraft, InternalLinkTarget } from '@/types'
 
-type StructureMode = 'article_only' | 'article_with_short_checklist' | 'article_with_short_faq' | 'article_with_checklist_and_faq'
+type StructureMode =
+  | 'article_only'
+  | 'article_with_short_checklist'
+  | 'article_with_short_faq'
+  | 'article_with_checklist_and_faq'
 
 const structureModes: StructureMode[] = ['article_only']
 
@@ -24,24 +28,31 @@ type TopicCandidate = {
 }
 
 const normaliseName = (input?: string | null) =>
-  input?.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').trim() || ''
+  input
+    ?.toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim() || ''
 
-const findBestTopic = (topics: TopicCandidate[], names: Array<string | null | undefined>): TopicCandidate | null => {
-  const childTopics = topics.filter((t) => t.parent_id)
-  const allTopics = [...childTopics, ...topics.filter((t) => !t.parent_id)]
+const findBestTopic = (
+  topics: TopicCandidate[],
+  names: Array<string | null | undefined>
+): TopicCandidate | null => {
+  const childTopics = topics.filter((topic) => topic.parent_id)
+  const allTopics = [...childTopics, ...topics.filter((topic) => !topic.parent_id)]
 
   for (const name of names) {
     const normalised = normaliseName(name)
     if (!normalised) continue
 
-    const direct = allTopics.find((t) => 
-      normaliseName(t.name) === normalised || normaliseName(t.slug) === normalised
+    const direct = allTopics.find((topic) =>
+      normaliseName(topic.name) === normalised || normaliseName(topic.slug) === normalised
     )
     if (direct) return direct
 
-    const partial = childTopics.find((t) => {
-      const tn = normaliseName(t.name)
-      return tn && (normalised.includes(tn) || tn.includes(normalised))
+    const partial = childTopics.find((topic) => {
+      const topicName = normaliseName(topic.name)
+      return topicName && (normalised.includes(topicName) || topicName.includes(normalised))
     })
     if (partial) return partial
   }
@@ -49,21 +60,24 @@ const findBestTopic = (topics: TopicCandidate[], names: Array<string | null | un
 }
 
 const buildTopicTaxonomy = (topics: TopicCandidate[]) => {
-  const parents = topics.filter((t) => !t.parent_id)
-  return parents.map((parent) => {
-    const children = topics
-      .filter((t) => t.parent_id === parent.id)
-      .map((c) => ` - ${c.name} [slug: ${c.slug}, id: ${c.id}]`)
-      .join('\n')
-    return children 
-      ? `- ${parent.name} [slug: ${parent.slug}, id: ${parent.id}]\n${children}`
-      : `- ${parent.name} [slug: ${parent.slug}, id: ${parent.id}]`
-  }).join('\n')
+  const parents = topics.filter((topic) => !topic.parent_id)
+  return parents
+    .map((parent) => {
+      const children = topics
+        .filter((topic) => topic.parent_id === parent.id)
+        .map((child) => ` - ${child.name} [slug: ${child.slug}, id: ${child.id}]`)
+        .join('\n')
+      return children
+        ? `- ${parent.name} [slug: ${parent.slug}, id: ${parent.id}]\n${children}`
+        : `- ${parent.name} [slug: ${parent.slug}, id: ${parent.id}]`
+    })
+    .join('\n')
 }
 
 const contentClusterMap: Record<string, { pillar: string; cluster: string }> = {
   'Physical Security': { pillar: 'Physical Security', cluster: 'physical-security-practice' },
   'Access Control': { pillar: 'Physical Security', cluster: 'access-control-failures' },
+  'CCTV & Surveillance': { pillar: 'Physical Security', cluster: 'cctv-real-world-use' },
   'Perimeter Security': { pillar: 'Physical Security', cluster: 'perimeter-security' },
   'Workplace Awareness': { pillar: 'Workplace Awareness', cluster: 'human-behaviour-risk' },
   'Digital Threats': { pillar: 'Digital Threats', cluster: 'digital-risk-basics' },
@@ -75,18 +89,29 @@ const stableHash = (input: string) =>
   Array.from(input).reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) >>> 0, 7)
 
 const normaliseClusterText = (input?: string | null) =>
-  input?.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'general-security'
+  input
+    ?.toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80) || 'general-security'
 
 const resolveCluster = (category?: string | null, subcategory?: string | null, prompt?: string | null) => {
   const mapped = (subcategory && contentClusterMap[subcategory]) || (category && contentClusterMap[category])
   if (mapped) return mapped
-  return { pillar: category || 'Security Awareness', cluster: normaliseClusterText(prompt) }
+  const fallback = category || subcategory || prompt || 'General Security'
+  return {
+    pillar: category || 'Security Awareness',
+    cluster: normaliseClusterText(fallback),
+  }
 }
 
 const parseInternalLinks = (value: unknown): InternalLinkTarget[] => {
   if (!Array.isArray(value)) return []
   return value
-    .filter((link): link is InternalLinkTarget => Boolean(link && typeof link === 'object' && 'slug' in link && 'title' in link))
+    .filter((link): link is InternalLinkTarget =>
+      Boolean(link && typeof link === 'object' && 'slug' in link && 'title' in link)
+    )
     .map((link) => ({
       title: String(link.title).slice(0, 120),
       slug: String(link.slug).replace(/^\/+|\/+$/g, ''),
@@ -96,7 +121,11 @@ const parseInternalLinks = (value: unknown): InternalLinkTarget[] => {
     .slice(0, 3)
 }
 
-const enforceInternalLinkInjection = (draft: any, candidates: any[], prompt: string) => {
+const enforceInternalLinkInjection = (
+  draft: any,
+  candidates: Array<{ title: string; slug: string; excerpt?: string | null }>,
+  prompt: string
+) => {
   if (!draft.content || candidates.length === 0) return draft
   const targets = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
   draft.internal_links = targets
@@ -105,48 +134,51 @@ const enforceInternalLinkInjection = (draft: any, candidates: any[], prompt: str
 }
 
 const getErrorMessage = (err: unknown, fallback = 'Article generation failed') => {
-  if (err instanceof Error) return err.message
-  if (typeof err === 'string') return err
+  if (err instanceof Error && err.message) return err.message
+  if (typeof err === 'string' && err.trim()) return err
   return fallback
 }
 
 // ============================================================
-// MASTER SYSTEM PROMPT v4 — Further tightened
+// MASTER SYSTEM PROMPT v4 — Tightened for latest output
 // ============================================================
 const buildSystemPrompt = (structureMode: StructureMode) => `
 You are a seasoned security operator writing for StaySecure360. 
-Write like an experienced practitioner doing a real site walk — calm, direct, specific, and practical. No marketing, no corporate polish, no motivational language.
+Write like an experienced practitioner doing real site walks — calm, direct, specific, and practical. No marketing tone, no corporate polish.
 
-Key Rules:
-- Focus on 3–4 concrete, mechanical issues. Describe how they actually fail with specific details.
-- Write naturally, like you're walking and talking through the property. 
-- Vary paragraph starters strongly. Never use predictable patterns such as "Next,", "Then there's", "Another", "Additionally", "Moving to", "Finally".
-- Use "I" sparingly and only when it feels authentic.
-- Prefer raw observations over general statements.
+Strict Rules:
+- Focus on 3–4 concrete mechanical failures with specific details.
+- Write naturally, like you're walking the property and pointing things out.
+- Vary every paragraph starter strongly. Avoid predictable patterns.
+- Use "I" sparingly and only when it feels natural.
 
-Strictly Banned:
+Banned Patterns & Phrases:
 - Walking tour language: "Stepping onto", "the first thing that catches my eye", "Next,", "Then there's", "Moving to", "Additionally", "Furthermore", "Finally"
-- Polished phrases: "it’s a red flag", "with minimal effort", "without making much noise", "dramatically improve", "clear signal", "rendering ineffective", "alarmingly easy"
+- Polished phrases: "it’s a red flag", "with minimal effort", "without making much noise", "dramatically improve", "clear signal", "rendering ineffective", "alarmingly easy", "straightforward fix"
 
-Opening:
-Start directly with a specific observation.
+Opening: Start directly with a specific observation.
+Ending: Stop on a quiet, practical note. No summaries.
 
-Ending:
-Stop on a quiet, practical note. No summaries.
-
-Self-check before returning:
+Self-check:
 - Does this feel like real spoken field notes?
-- Are paragraph starters varied and unpredictable?
-- Is there any list-like or walking-tour structure?
+- Are paragraph starters varied?
+- Is there any list-like structure?
 - Have I avoided all banned patterns?
 
 Current structure mode: ${structureMode}
 Return ONLY valid JSON.
 `
 
-const buildNarrativeRewritePrompt = (article: string) => `Rewrite this article to sound like authentic field observations from an experienced security operator.
+const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle>) =>
+  validation.score < 90 ||
+  validation.issues.length > 0 ||
+  validation.warnings.some((warning) =>
+    /report-like|checklist|repetitive|transition|heading|bullet|list-like/i.test(warning)
+  )
 
-Make it flow naturally. Remove all walking-tour structure, predictable transitions, and polished language. Vary sentence starters heavily. Keep it calm, specific, and practical.
+const buildNarrativeRewritePrompt = (article: string) => `Rewrite the article to sound like natural field observations from an experienced security operator.
+
+Remove all walking-tour structure, predictable transitions, and polished language. Make paragraph starters varied and human.
 
 Return ONLY this JSON:
 {
@@ -160,14 +192,21 @@ ${article}
 
 export async function POST(request: NextRequest) {
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY ?? '' })
+    const openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY ?? '',
+    })
 
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
 
     const adminClient = createAdminClient()
-    const { data: profile } = await adminClient.from('profiles').select('role').eq('id', user.id).single()
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
     if (!profile || !['admin', 'editor'].includes(profile.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -199,7 +238,7 @@ export async function POST(request: NextRequest) {
       .eq('status', 'published')
       .limit(6)
 
-    const linkCandidates = (existingArticles ?? []).map(a => ({
+    const linkCandidates = (existingArticles ?? []).map((a) => ({
       title: String(a.title),
       slug: String(a.slug).replace(/^\/+|\/+$/g, ''),
       excerpt: a.excerpt ? String(a.excerpt) : null,
@@ -245,6 +284,7 @@ Write a natural, field-informed article following all system prompt rules.`
 
     draft = enforceInternalLinkInjection(draft, linkCandidates, prompt)
 
+    // Validation + optional rewrite
     let validation = validateArticle(draft.content || '', 950)
     console.log(generateValidationReport(validation))
 
@@ -268,7 +308,7 @@ Write a natural, field-informed article following all system prompt rules.`
           console.log('[Narrative Rewrite Applied]')
         }
       } catch (e) {
-        console.warn('Rewrite skipped', e)
+        console.warn('Rewrite skipped:', e)
       }
     }
 
