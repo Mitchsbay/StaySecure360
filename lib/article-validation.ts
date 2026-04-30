@@ -91,6 +91,9 @@ const BANNED_PHRASES = [
   'lasers',
   'rfid jammer',
   'hacking gadget',
+  'plays a silent but crucial role',
+  'a frequent misstep',
+  'as important as locks and alarms',
 ]
 
 /**
@@ -175,8 +178,8 @@ export function countListMarkers(content: string): number {
  * Detect repeated category-by-category openings, which make the article read
  * like a report rather than a practitioner narrative.
  */
-export function detectReportLikeStructure(content: string): boolean {
-  if (!content) return false
+export function getReportLikeParagraphOpenings(content: string): string[] {
+  if (!content) return []
 
   const paragraphs = content
     .split(/\n{2,}/)
@@ -184,24 +187,50 @@ export function detectReportLikeStructure(content: string): boolean {
     .filter(Boolean)
 
   const categoryOpeners = [
-    /^windows?\s+(are|is|can|also)/i,
-    /^doors?\s+(are|is|can|also)/i,
-    /^locks?\s+(are|is|can|also)/i,
-    /^gates?\s+(are|is|can|also)/i,
-    /^fences?\s+(are|is|can|also)/i,
-    /^cctv\s+(cameras\s+)?(are|is|can|also|frequently)/i,
-    /^cameras?\s+(are|is|can|also|frequently)/i,
-    /^alarm\s+systems?\s+(are|is|can|also|themselves|suffer)/i,
-    /^for\s+(rental\s+properties|businesses|homeowners|landlords)/i,
-    /^practical\s+(perimeter\s+)?security\s+(means|requires|starts)/i,
-    /^another\s+(common\s+)?(issue|problem|weakness)/i,
+    /^windows?\b/i,
+    /^doors?\b/i,
+    /^door\s+locks?\b/i,
+    /^locks?\b/i,
+    /^deadbolts?\b/i,
+    /^gates?\b/i,
+    /^fences?\b/i,
+    /^fences?\s+and\s+gates?\b/i,
+    /^rear\s+sliding\s+doors?\b/i,
+    /^sliding\s+doors?\b/i,
+    /^cctv\b/i,
+    /^cameras?\b/i,
+    /^camera\s+coverage\b/i,
+    /^alarm\s+systems?\b/i,
+    /^alarms?\b/i,
+    /^lighting\b/i,
+    /^landscaping\b/i,
+    /^lastly\b/i,
+    /^for\s+(rental\s+properties|businesses|homeowners|landlords|tenants)\b/i,
+    /^a\s+frequent\s+misstep\b/i,
+    /^opportunistic\s+burglars\b/i,
+    /^practical\s+(perimeter\s+)?security\b/i,
+    /^another\s+(common\s+)?(issue|problem|weakness)\b/i,
   ]
 
-  const hits = paragraphs.filter((paragraph) =>
-    categoryOpeners.some((pattern) => pattern.test(paragraph))
-  ).length
+  return paragraphs
+    .filter((paragraph) => categoryOpeners.some((pattern) => pattern.test(paragraph)))
+    .map((paragraph) => paragraph.split(/\s+/).slice(0, 6).join(' '))
+}
 
-  return hits >= 3
+/**
+ * Detect repeated category-by-category openings, which make the article read
+ * like a report rather than a practitioner narrative.
+ */
+export function detectReportLikeStructure(content: string): boolean {
+  return getReportLikeParagraphOpenings(content).length >= 2
+}
+
+/**
+ * Detect scope drift where the article tries to cover too many standalone
+ * issue areas instead of following one inspection route or failure pattern.
+ */
+export function detectScopeDrift(content: string): boolean {
+  return getReportLikeParagraphOpenings(content).length >= 3
 }
 
 /**
@@ -257,7 +286,9 @@ export function validateArticle(content: string, minWords: number = 850): Valida
   const hasAIIntro = detectAIIntro(content)
   const headingCount = countSectionHeadings(content)
   const listMarkerCount = countListMarkers(content)
+  const reportLikeOpenings = getReportLikeParagraphOpenings(content)
   const hasReportLikeStructure = detectReportLikeStructure(content)
+  const hasScopeDrift = detectScopeDrift(content)
   const hasForcedInternalLinks = detectForcedInternalLinks(content)
 
   if (wordCount < minWords) {
@@ -285,7 +316,11 @@ export function validateArticle(content: string, minWords: number = 850): Valida
   }
 
   if (hasReportLikeStructure) {
-    warnings.push('Article has repeated category-by-category openings and may read like a report-like checklist')
+    warnings.push(`Article has repeated category-by-category openings and may read like a report-like checklist: ${reportLikeOpenings.join(' | ')}`)
+  }
+
+  if (hasScopeDrift) {
+    warnings.push(`Article shows scope drift / too many issue areas for one human-style article: ${reportLikeOpenings.join(' | ')}`)
   }
 
   if (hasForcedInternalLinks) {
@@ -300,6 +335,7 @@ export function validateArticle(content: string, minWords: number = 850): Valida
   score -= headingCount * 8
   score -= listMarkerCount * 4
   score -= hasReportLikeStructure ? 18 : 0
+  score -= hasScopeDrift ? 18 : 0
   score -= hasForcedInternalLinks ? 12 : 0
 
   score = Math.max(0, Math.min(100, score))

@@ -36,11 +36,14 @@ The visible article body should:
 - use 3–4 developed examples at most
 - explain the practical mechanics of failure rather than listing every possible issue
 - move like a site walk, inspection, incident review, or operational explanation
+- follow one route or one failure pattern rather than the whole topic
 - avoid giving every issue equal weight
 - vary sentence and paragraph length naturally without forcing fragments every few lines
 - prefer precise observations over attitude
 - avoid recapping what was already said
 - end on a practical warning, unresolved risk, or grounded observation
+
+The strengthened narrowing rule now tells the model that a strong article is not comprehensive. For residential perimeter pieces, the default route is usually: side/rear gate → rear sliding door or rear access point → camera/alarm confidence gap → maintenance or household habit. Extra issues such as windows, lighting, landscaping, rentals, locks, codes, fences, and behaviour should not all receive standalone paragraphs in one article.
 
 Good operational detail includes examples such as:
 
@@ -62,7 +65,7 @@ The visible article body should not contain:
 - bullet lists
 - forced FAQ or checklist sections
 - one paragraph per category
-- repeated paragraph openings such as "Windows are...", "CCTV is...", "Alarm systems are...", "For rental properties...", or "Practical perimeter security means..."
+- repeated paragraph openings such as "Windows are...", "Windows behind...", "CCTV coverage...", "Alarm systems...", "Lighting plays...", "Lastly...", "Landscaping...", "For rental properties...", or "Practical perimeter security means..."
 
 Checklist and FAQ fields can still be returned as JSON metadata for the CMS. They should not be forced into the public article body unless specifically requested by the user.
 
@@ -158,7 +161,7 @@ The prompt specifically bans SEO-style link sentences such as:
 The generator now has two levels of control:
 
 1. **System prompt control** — the model is instructed to write in the operational voice above.
-2. **Post-generation validation and optional rewrite** — the backend validates the draft and can run a second rewrite pass if the article contains AI/fake-grit phrases, polished conclusion patterns, obvious template structure, forced internal links, headings, bullets, or report-like category openings.
+2. **Post-generation validation and optional rewrite** — the backend validates the draft and can run a second rewrite pass if the article contains AI/fake-grit phrases, polished conclusion patterns, obvious template structure, forced internal links, headings, bullets, report-like category openings, or scope drift caused by too many standalone issue areas.
 
 This means the article generator is not relying only on the user prompt box. The server now pushes drafts back toward a practitioner-style narrative before returning them to the CMS.
 
@@ -170,9 +173,9 @@ Checklist and FAQ data may still be returned in JSON metadata, but the visible a
 
 ## Length and depth
 
-The default target is **850–1100 words**, unless the user asks for a longer article.
+The default target is **800–1000 words**, unless the user asks for a longer article.
 
-Depth should come from practical nuance, not from adding more categories. If an article is getting long, the model is instructed to narrow it rather than add more examples.
+Depth should come from practical nuance, not from adding more categories. If an article is getting long, the model is instructed to narrow it rather than add more examples. A shorter article with one clear inspection route is preferred over a longer article that reads like a category-by-category guide.
 
 ## Opening rule
 
