@@ -249,6 +249,59 @@ const normaliseAustralianSpelling = (content: string) => {
     .replace(/\bOrganizations\b/g, 'Organisations')
 }
 
+
+const softenChecklistStyleEnding = (content: string) => {
+  if (!content) return content
+
+  const paragraphs = content
+    .trim()
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+
+  if (paragraphs.length < 3) return content
+
+  const lastThree = paragraphs.slice(-3)
+  const closingText = lastThree.join(' ').toLowerCase()
+
+  const looksChecklistLike =
+    /if\s+you\s+want\s+to\s+check\s+your\s+own\s+(place|property|setup)/i.test(closingText) ||
+    /try\s+this\s*:/i.test(closingText) ||
+    /start\s+with\s+the\s+gate/i.test(closingText) ||
+    /then\s+(test|check|walk|look)/i.test(closingText) ||
+    /finally,?\s+(look|check|take)/i.test(closingText) ||
+    /check\s+your\s+sliding\s+doors?.*look\s+at\s+your\s+cameras?.*test\s+your\s+alarm/is.test(closingText)
+
+  if (!looksChecklistLike) return content
+
+  const replacement = [
+    'A quick walk around the property usually shows the problem. The gate should not need to be lifted, pushed, or pulled into place before it latches. The rear door should not move easily in the frame, and there should be something more than the handle latch stopping it from sliding open. Cameras should show the actual approach to the gate and back door, not just a wide view of the yard. Alarm sensors should be tested, not trusted because the panel looks normal.',
+    'This is not about expensive cameras or complicated locks. It is about the small gaps that show up when nobody has checked the property properly for a while: the loose gate, the unlatched rear door, the blind camera angle, the hidden key, the alarm alert nobody receives. Those are the weaknesses opportunistic people look for first. If they find one, the rest of the system matters a lot less.',
+  ]
+
+  if (/if\s+you\s+want\s+to\s+check\s+your\s+own|start\s+with\s+the\s+gate|try\s+this/i.test(lastThree[0] || '')) {
+    return [...paragraphs.slice(0, Math.max(0, paragraphs.length - 3)), ...replacement].join('\n\n')
+  }
+
+  return [...paragraphs.slice(0, Math.max(0, paragraphs.length - 2)), ...replacement].join('\n\n')
+}
+
+const tightenTechnicalWording = (content: string) => {
+  if (!content) return content
+
+  return content
+    .replace(
+      /the locks are just the basic latch type that can be slipped open with a credit card or a piece of plastic if the door isn’t fully locked down with the top or bottom security bars/gi,
+      'the locks are often basic latch types that can be worked loose if the door has enough play in the frame and there is no secondary bar or lock holding it shut'
+    )
+    .replace(
+      /the locks are just the basic latch type that can be slipped open with a credit card or a piece of plastic if the door isn't fully locked down with the top or bottom security bars/gi,
+      'the locks are often basic latch types that can be worked loose if the door has enough play in the frame and there is no secondary bar or lock holding it shut'
+    )
+    .replace(/sliding doors are a notorious weak spot/gi, 'sliding doors are a regular weak spot')
+    .replace(/opportunistic intrusion/gi, 'opportunistic entry')
+}
+
 const pickFallbackLinkTargets = (
   candidates: Array<{ title: string; slug: string; excerpt?: string | null; content_cluster?: string | null; pillar_topic?: string | null }>,
   draft: Partial<GeneratedArticleDraft>,
@@ -459,7 +512,7 @@ HUMAN WRITING RULES:
 9. Do not end with a polished conclusion. Stop on a practical observation, unresolved risk, or grounded warning.
 10. Do not repeatedly announce observations with phrases such as "A common issue", "A common failure", "I often find", "I often encounter", "I often observe", "Frequently", or "In many cases". Vary the movement naturally.
 11. Keep the language plain enough that it could be said to a client during a site walk. Operational detail is good; audit-report wording is not.
-12. Do not turn the final section into a step-by-step checklist. Avoid endings built around "try this", "then", and "finally" unless the user explicitly asks for a checklist.
+12. Do not turn the final section into a step-by-step checklist. Avoid endings built around "if you want to check your own place", "try this", "start with the gate", "then", and "finally" unless the user explicitly asks for a checklist. Convert practical advice into normal prose instead.
 
 HARD NARROWING RULE:
 - A good StaySecure360 article is not comprehensive. It follows one inspection route or one failure pattern.
@@ -493,7 +546,7 @@ TECHNICAL ACCURACY RULES:
 - Avoid questionable claims about specialist attack tools unless the prompt specifically asks for them.
 - Do not mention RFID jammers, hacking gadgets, or sophisticated bypass methods in ordinary residential articles unless technically relevant and accurately explained.
 - Do not exaggerate how easy a bypass is unless the weakness described genuinely supports it.
-- If discussing a credit-card bypass, make clear it applies to loose spring latches or poor handle locks, not a properly thrown deadbolt.
+- If discussing a credit-card bypass, make clear it applies to loose spring latches or poor handle locks, not a properly thrown deadbolt. Do not describe sliding doors as being opened with a credit card; describe ordinary sliding-door failures as play in the frame, worn rollers, weak catches, missing anti-lift protection, or no secondary bar/lock.
 - If discussing deadbolts, distinguish between the lock body, the strike plate, the frame, screw length, and door alignment.
 - If discussing alarms and CCTV, focus on ordinary failure modes: dead backup batteries, disabled notifications, full storage, missed alerts, poor camera angles, dirty lenses, app access problems, nobody checking the system, shared codes, misaligned sensors, unlocked gates, poor lighting, and weak maintenance.
 
@@ -522,7 +575,7 @@ Do not copy this example verbatim, but this is the type of opening expected:
 ENDING RULE:
 Do not end with a sales pitch, slogan, summary, or call-to-action.
 End with a practical warning, unresolved risk, or an observation the reader can test on their own property.
-Do not end with a checklist sequence such as "try this", "then", and "finally". Keep the final section in normal prose.
+Do not end with a checklist sequence such as "if you want to check your own place", "try this", "start with the gate", "then", and "finally". Keep the final section in normal prose, for example: "A quick walk around the property usually shows the problem..."
 
 FINAL STYLE CHECK BEFORE RETURNING:
 Before returning the JSON, silently check the article against these questions:
@@ -574,7 +627,7 @@ Mandatory rewrite rules:
 - Remove headings, bullet lists, numbered sections, forced conclusions, obvious AI transitions, forced or repeated internal links, checklist-style endings, and neat summaries.
 - Preserve useful specifics only where they serve the route: gate latches, rear sliding doors, anti-lift issues, strike plates, screw length, door alignment, camera angle, storage, backup batteries, ignored alerts, shared codes, and maintenance.
 - Aim for 800-1000 words. Shorter and focused is better than long and comprehensive.
-- End on a practical observation or warning the reader can test, not a neat summary. Do not end with a "try this / then / finally" checklist sequence.
+- End on a practical observation or warning the reader can test, not a neat summary. Do not end with an "if you want to check your own place / try this / start with the gate / then / finally" checklist sequence. Convert practical checks into normal prose.
 
 Return ONLY valid JSON in this exact shape:
 {
@@ -843,6 +896,21 @@ Return ONLY valid JSON with exactly these keys:
         draft.excerpt = australianContent.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
         draft.meta_description = draft.excerpt.slice(0, 160)
         console.log('[Australian Spelling Cleanup Applied]')
+      }
+    }
+
+
+    if (draft.content) {
+      const tightenedContent = tightenTechnicalWording(softenChecklistStyleEnding(draft.content))
+      if (tightenedContent !== draft.content) {
+        draft.content = tightenedContent
+        draft.article = tightenedContent
+        draft.excerpt = tightenedContent.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
+        draft.meta_description = draft.excerpt.slice(0, 160)
+
+        validation = validateArticle(draft.content || '', 800)
+        console.log('[V6.3 Ending + Technical Cleanup Applied]')
+        console.log(generateValidationReport(validation))
       }
     }
 

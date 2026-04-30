@@ -268,3 +268,11 @@ It should end with a practical warning, unresolved risk, or an observation the r
 - `/ARTICLE_GENERATOR_PROMPT.md`
 - `/app/(public)/articles/[slug]/page.tsx`
 - `/app/globals.css`
+
+## V6.3 fixes
+
+V6.3 adds three final hardening changes:
+
+1. **Checklist-ending cleanup** — if the generated article ends with a sequence like “If you want to check your own place… start with the gate… then… finally…”, the backend converts it into normal prose. Practical checks are still included, but they no longer read like a mini checklist inside the article body.
+2. **Sliding-door technical wording cleanup** — the backend now avoids describing sliding doors as being opened with a credit card. For sliding doors, ordinary failure modes should be described as play in the frame, worn rollers, weak catches, missing anti-lift protection, or no secondary bar/lock.
+3. **Hard first-paragraph font reset** — the public article body now uses an `article-body` class with explicit CSS to stop the first paragraph from rendering larger than the rest of the article. This prevents any standfirst/lead-paragraph styling from leaking into generated article content.

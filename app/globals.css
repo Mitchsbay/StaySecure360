@@ -34,6 +34,29 @@
     @apply text-base text-gray-700 leading-relaxed mb-4 font-normal;
   }
 
+
+  /* Article body hard reset: prevents the first paragraph from rendering like a standfirst/lead paragraph. */
+  .article-body,
+  .article-body p,
+  .article-body > p:first-child,
+  .article-body > p:first-of-type {
+    @apply text-base text-gray-700 leading-relaxed font-normal;
+  }
+
+  .article-body p,
+  .article-body p:first-child,
+  .article-body p:first-of-type,
+  .article-body p > * {
+    font-size: 1rem !important;
+    line-height: 1.75rem !important;
+  }
+
+  .article-body p:first-child,
+  .article-body p:first-of-type {
+    font-weight: 400 !important;
+    margin-bottom: 1rem !important;
+  }
+
   .prose-content ul {
     @apply list-disc list-inside space-y-2 mb-4 text-gray-700;
   }

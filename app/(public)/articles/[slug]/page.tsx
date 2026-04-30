@@ -129,7 +129,7 @@ export default async function ArticlePage({ params }: Props) {
           {/* Article body */}
           {article.content && (
             <div
-              className="prose-content mb-10"
+              className="prose-content article-body mb-10"
               dangerouslySetInnerHTML={{
                 __html: markdownToHtml(article.content),
               }}

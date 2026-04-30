@@ -58,6 +58,11 @@ const BANNED_PHRASES = [
   'a significant issue',
   'in many cases',
   'so, what can you do',
+  'if you want to check your own place',
+  'try this:',
+  'start with the gate',
+  'opportunistic intrusion',
+  'sliding doors are a notorious weak spot',
   'ultimately',
   'furthermore',
   'moreover',
@@ -360,7 +365,11 @@ export function detectChecklistEnding(content: string): boolean {
 
   const checklistPatterns = [
     /if\s+you\s+want\s+to\s+test\s+your\s+own\s+setup/,
+    /if\s+you\s+want\s+to\s+check\s+your\s+own\s+(place|property|setup)/,
     /try\s+this:/,
+    /start\s+with\s+the\s+gate/,
+    /then\s+(test|check|walk|look)/,
+    /finally,?\s+(look|check|take)/,
     /then\s+walk\s+around/,
     /finally,\s+take\s+a\s+look/,
     /check\s+your\s+sliding\s+doors?.*look\s+at\s+your\s+cameras?.*test\s+your\s+alarm/s,
@@ -386,10 +395,7 @@ export function detectForcedInternalLinks(content: string): boolean {
     'to see how this plays out elsewhere',
   ]
 
-  const hasForcedPhrase = forcedLinkPhrases.some((phrase) => lowerContent.includes(phrase))
-  const hasArticleMarkdownLink = /\[[^\]]+\]\((?:\/articles\/|https?:\/\/[^)]*staysecure360\.com\/)/i.test(content)
-
-  return hasForcedPhrase || hasArticleMarkdownLink
+  return forcedLinkPhrases.some((phrase) => lowerContent.includes(phrase))
 }
 
 /**
