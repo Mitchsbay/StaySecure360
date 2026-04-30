@@ -2,11 +2,12 @@
 // /api/generate-article — Server-side OpenAI article generation
 //
 // REQUIRED ENVIRONMENT VARIABLES (set in Vercel or .env.local):
-//   OPENAI_API_KEY              — Your OpenAI API key (server-side only)
-//   NEXT_PUBLIC_SUPABASE_URL
-//   NEXT_PUBLIC_SUPABASE_ANON_KEY
-//   SUPABASE_SERVICE_ROLE_KEY
+// OPENAI_API_KEY — Your OpenAI API key (server-side only)
+// NEXT_PUBLIC_SUPABASE_URL
+// NEXT_PUBLIC_SUPABASE_ANON_KEY
+// SUPABASE_SERVICE_ROLE_KEY
 // ============================================================
+
 export const dynamic = 'force-dynamic'
 export const maxDuration = 180
 
@@ -24,8 +25,6 @@ type StructureMode =
   | 'article_with_checklist_and_faq'
 
 // Keep the public article body narrative by default.
-// Checklist/FAQ fields can still be returned as CMS metadata, but forcing them
-// into the body makes the draft read like a templated AI blog post.
 const structureModes: StructureMode[] = [
   'article_only',
 ]
@@ -66,7 +65,6 @@ const findBestTopic = (
     })
     if (partial) return partial
   }
-
   return null
 }
 
@@ -76,9 +74,8 @@ const buildTopicTaxonomy = (topics: TopicCandidate[]) => {
     .map((parent) => {
       const children = topics
         .filter((topic) => topic.parent_id === parent.id)
-        .map((child) => '  - ' + child.name + ' [slug: ' + child.slug + ', id: ' + child.id + ']')
+        .map((child) => ' - ' + child.name + ' [slug: ' + child.slug + ', id: ' + child.id + ']')
         .join('\n')
-
       return children
         ? '- ' + parent.name + ' [slug: ' + parent.slug + ', id: ' + parent.id + ']\n' + children
         : '- ' + parent.name + ' [slug: ' + parent.slug + ', id: ' + parent.id + ']'
@@ -120,7 +117,6 @@ const toneModes = [
 const stableHash = (input: string) =>
   Array.from(input).reduce((acc, char) => (acc * 31 + char.charCodeAt(0)) >>> 0, 7)
 
-
 const normaliseClusterText = (input?: string | null) =>
   input
     ?.toLowerCase()
@@ -132,7 +128,6 @@ const normaliseClusterText = (input?: string | null) =>
 const resolveCluster = (category?: string | null, subcategory?: string | null, prompt?: string | null) => {
   const mapped = (subcategory && contentClusterMap[subcategory]) || (category && contentClusterMap[category])
   if (mapped) return mapped
-
   const fallback = category || subcategory || prompt || 'General Security'
   return {
     pillar: category || 'Security Awareness',
@@ -155,7 +150,6 @@ const parseInternalLinks = (value: unknown): InternalLinkTarget[] => {
     .filter((link) => link.slug && link.title && link.anchor)
     .slice(0, 4)
 }
-
 
 const cleanInternalLinkTitle = (title: string) =>
   String(title || '')
@@ -226,10 +220,6 @@ const enforceInternalLinkInjection = (
     ? existingLinks.slice(0, 2)
     : pickFallbackLinkTargets(candidates, draft, prompt).slice(0, 2)
 
-  // Keep contextual internal links as metadata only.
-  // Forced body injection created unnatural SEO sentences and made drafts read AI-generated.
-  // The public article pages can still show these as related reading, and the editor can add
-  // a contextual link manually when it genuinely fits the paragraph.
   draft.internal_links = targets
   draft.internal_link_targets = targets
   return draft
@@ -250,89 +240,64 @@ const getErrorMessage = (err: unknown, fallback = 'Article generation failed') =
   return fallback
 }
 
-const buildSystemPrompt = (structureMode: StructureMode) => `You are writing for StaySecure360 in the voice of an experienced security operator and risk professional. The voice is practical, factual, field-informed, and direct. It is not theatrical, cynical, salesy, or polished like a corporate blog.
+// ============================================================
+// NEW MASTER SYSTEM PROMPT (Strongly Improved)
+// ============================================================
+const buildSystemPrompt = (structureMode: StructureMode) => `
+You are an experienced security operator and risk professional writing for StaySecure360. 
+Your voice is calm, direct, field-informed, and operationally credible — like someone who has spent years doing site walks, perimeter checks, incident reviews, and client audits.
 
 CORE WRITING PHILOSOPHY:
-Write like someone explaining what they regularly see during inspections, incident reviews, control room work, site walks, audits, or client conversations. The point is not to sound "gritty". The point is to sound observant, specific, and operationally credible.
+- Sound observant and specific rather than theatrical or motivational.
+- Focus on realistic failure modes: poor installation, wear and tear, human convenience overriding policy, maintenance neglect, complacency, and visibility issues.
+- Prioritise "how things actually fail in practice" over generic advice.
 
 VOICE AND TONE:
-- Calm, direct, and experienced.
-- Practical rather than dramatic.
-- Specific about how controls fail in real life.
-- Use "I" only when it genuinely helps the article feel like a field observation.
-- Avoid invented hero stories or exaggerated war-story language.
-- Avoid grumpy ranting, punchline writing, motivational language, or internet-thread aggression.
-- Do not write like a character. Write like a practitioner.
+- Practical, measured, and experienced.
+- Use "I" sparingly and only when it adds genuine field credibility.
+- Vary sentence length and rhythm naturally. Mix short, direct observations with longer explanatory ones.
+- Allow mild human asymmetry — not every point needs equal weight or perfect balance.
 
-HUMAN WRITING RULES:
-1. Keep one clear through-line. Do not try to cover the whole topic.
-2. Use 3-4 developed examples at most. Explain them properly instead of listing every possible issue.
-3. Let the article move like a site walk, inspection, incident review, or operational explanation rather than a category-by-category report.
-4. Do not give every issue equal weight. Some observations can be short; others can carry the article.
-5. Vary sentence and paragraph length naturally, but do not force fragments every few lines.
-6. Prefer precise observations over attitude. A weak strike plate, an unlatched rear gate, a dead backup battery, or a camera pointing at the wrong area is stronger than a clever line.
-7. Do not use neat transitions such as "Furthermore," "Moreover," "Additionally," "First," "Second," or "Finally." Just move to the next observation.
-8. Do not recap what you just said. Once the point is made, move on.
-9. Do not end with a polished conclusion. Stop on a practical observation, unresolved risk, or grounded warning.
+STRICT HUMAN WRITING RULES:
+1. Maintain one clear through-line. Do not try to cover every possible issue in one article.
+2. Use 3–4 developed, concrete examples at most. Explain the mechanics properly.
+3. Write as continuous narrative — like walking a site or reviewing an incident.
+   - NO Markdown headings in the visible article body.
+   - NO numbered lists or bullet points in the visible article body.
+4. Avoid repetitive paragraph starters: "One common...", "Another issue...", "Many homeowners...", "From there...", "Let's not forget...".
+5. Do not force internal links into the article body. Return them only in the internal_links metadata field.
+6. Prefer precise mechanical details (weak strike plate with short screws, missing anti-lift pins on sliding doors, dirty camera lenses, dead backup batteries, unlatched gates) over vague warnings.
 
-ANTI-TEMPLATE RULE:
-- No Markdown headings in the visible article body.
-- No numbered sections in the visible article body.
-- No bullet lists in the visible article body.
-- No FAQ or checklist inside the visible article body unless explicitly requested by the user.
-- Do not write one paragraph per category.
-- Avoid repeated paragraph openings such as "Windows are...", "CCTV is...", "Alarm systems are...", "For businesses...", "For rental properties...", "Practical perimeter security means...", or "Another issue is...".
-- The JSON may still include checklist_items and faq_items for CMS metadata, but the visible article should read as a narrative article.
+BANNED PHRASES — NEVER USE:
+- "In today's world", "It is important to note", "A comprehensive approach", "Crucial to consider", "Culture of awareness", "The key takeaway", "Ultimately", "This article explores", "Delve into", "Peace of mind", "Robust security", "Stay vigilant", "False sense of security", "chain of vulnerabilities".
+- Mechanical transitions: "Furthermore", "Moreover", "Additionally", "First", "Second", "Finally".
+- Fake-grit: "brutal truth", "battlefield", "Hollywood break-ins", "bad guys", "lazy thieves", "wake-up call".
 
-BANNED AI / OVER-POLISHED PHRASES:
-Do not use: "In today's world", "In conclusion", "It is important to note", "A comprehensive approach", "Delve into", "Peace of mind", "Robust security", "The reality is", "When it comes to", "Crucial to consider", "Stay vigilant", "Culture of awareness", "The key takeaway", "Ultimately", "This article explores", "Furthermore", "Moreover", "Additionally", "First", "Second", "Finally".
-
-BANNED FAKE-GRIT / THEATRICAL PHRASES:
-Do not use: "brutal truth", "battlefield", "frontier", "Hollywood break-ins", "bad guys", "lazy thieves", "movie villains", "security theatre" unless technically appropriate, "not sexy", "gritty", "wake-up call", "game changer", "hard truth", "no-nonsense", "lasers", "fortress", "no gadget replaces grit", "enough with the excuses", "come on in".
-
-TECHNICAL ACCURACY RULES:
-- Avoid questionable claims about specialist attack tools unless the prompt specifically asks for them.
-- Do not mention RFID jammers, hacking gadgets, or sophisticated bypass methods in ordinary residential articles unless technically relevant and accurately explained.
-- Do not exaggerate how easy a bypass is unless the weakness described genuinely supports it.
-- If discussing a credit-card bypass, make clear it applies to loose spring latches or poor handle locks, not a properly thrown deadbolt.
-- If discussing deadbolts, distinguish between the lock body, the strike plate, the frame, screw length, and door alignment.
-- If discussing alarms and CCTV, focus on ordinary failure modes: dead backup batteries, disabled notifications, full storage, missed alerts, poor camera angles, dirty lenses, app access problems, nobody checking the system, shared codes, misaligned sensors, unlocked gates, poor lighting, and weak maintenance.
-
-INTERNAL LINK RULES:
-- Do not force internal links into the article body.
-- If a link fits naturally, use it sparingly and only where it belongs.
-- Prefer returning internal link targets in the internal_links metadata field so the site can display related reading separately.
-- Never interrupt a field observation with an SEO-style link sentence.
-- Never use phrases like "it's worth looking at", "for a broader look", "I often reference", "check out", or "the failure mode here is similar" just to place a link.
-
-LENGTH AND DEPTH:
-- Aim for 850-1100 words unless the user asks for a longer article.
-- Depth should come from practical nuance, not from adding more categories.
-- If the article is getting long, narrow it. Do not add another example just to increase word count.
+LENGTH & DEPTH:
+- Target 950–1200 words.
+- Build depth through nuance and real mechanics, not by adding more topics.
 
 OPENING RULE:
-Start with a specific operational observation, not a generic introduction.
-Do not use the same opening pattern every time.
-Do not copy this example verbatim, but this is the type of opening expected:
-"The first thing I usually check on a residential job is not the alarm panel. It is the side gate."
+Start with a specific, grounded operational observation. Avoid repetitive scene-setting like "It's a quiet evening...".
 
 ENDING RULE:
-Do not end with a sales pitch, slogan, summary, or call-to-action.
-End with a practical warning, unresolved risk, or an observation the reader can test on their own property.
+End on a practical observation, a testable risk, or a quiet warning. Never use a polished summary or motivational close.
 
-FINAL STYLE CHECK BEFORE RETURNING:
-Before returning the JSON, silently check the article against these questions:
-- Does it sound like a practitioner, not a corporate blog?
-- Does it avoid fake-gritty language?
-- Does it avoid checklist/report structure?
-- Does it stay focused on one clear through-line?
-- Are there no forced internal links in the visible article body?
-- Could a real security operator plausibly say this?
+TECHNICAL ACCURACY:
+Stick to common, realistic failure modes. Avoid unsubstantiated claims about advanced attack tools unless specifically requested.
 
-If the answer to any of these is no, rewrite the article before returning it.
+SELF-CHECK BEFORE RETURNING JSON:
+Silently evaluate the article:
+- Does it sound like a real security professional sharing field observations?
+- Does it avoid all banned phrases and repetitive structures?
+- Is the flow natural rather than checklist-like or category-by-category?
+- Would this pass as human-written on StaySecure360?
+
+If not, rewrite internally until it does.
 
 Current structure mode: ${structureMode}
-Return ONLY valid JSON with the schema provided in the user prompt.`
+Return ONLY valid JSON matching the schema provided in the user prompt.
+`
 
 const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle>) =>
   validation.score < 88 ||
@@ -342,18 +307,14 @@ const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle
   )
 
 const buildNarrativeRewritePrompt = (article: string) => `Rewrite the article below so it sounds less like a report, checklist, SEO article, or category-by-category security guide.
-
 Keep the factual content and operational accuracy. Do not make it grumpy, theatrical, salesy, motivational, or polished. The voice should be calm, experienced, specific, and practical.
 
 Mandatory rewrite rules:
-- Make it feel like an experienced operator walking through a property, reviewing an incident, or explaining a failure pattern in sequence.
+- Make it feel like an experienced operator walking through a property or explaining a failure pattern.
 - Keep one clear through-line.
-- Use 3-4 developed observations at most rather than listing every possible weakness.
-- Do not give every issue equal weight.
-- Do not start repeated paragraphs with category labels such as "Windows are", "CCTV cameras", "Alarm systems", "For rental properties", or "Practical perimeter security means".
+- Use 3-4 developed observations at most.
 - Remove headings, bullet lists, numbered sections, forced conclusions, obvious AI transitions, and forced internal links.
-- Preserve useful specifics such as gate latches, rear sliding doors, strike plates, screw length, door alignment, camera angle, storage, backup batteries, codes, and maintenance where they are relevant.
-- End on a practical observation or warning the reader can test, not a neat summary.
+- End on a practical observation or warning the reader can test.
 
 Return ONLY valid JSON in this exact shape:
 {
@@ -365,95 +326,96 @@ Article to rewrite:
 ${article}
 `
 
-
 export async function POST(request: NextRequest) {
   try {
     const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY ?? '',
-  })
+      apiKey: process.env.OPENAI_API_KEY ?? '',
+    })
 
-  // ── Auth check ──────────────────────────────────────────────
-  const supabase = createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+    // ── Auth check ──────────────────────────────────────────────
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
 
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
-  }
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
+    }
 
-  const adminClient = createAdminClient()
-  const { data: profile } = await adminClient
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+    const adminClient = createAdminClient()
+    const { data: profile } = await adminClient
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
 
-  if (!profile || !['admin', 'editor'].includes(profile.role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+    if (!profile || !['admin', 'editor'].includes(profile.role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
-  // ── Parse request ────────────────────────────────────────────
-  let body: GenerateArticleRequest & { generateImage?: boolean }
-  try {
-    body = await request.json()
-  } catch {
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
-  }
+    // ── Parse request ────────────────────────────────────────────
+    let body: GenerateArticleRequest & { generateImage?: boolean }
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    }
 
-  const { prompt, audience, tone, topic, keywords } = body
+    const { prompt, audience, tone, topic, keywords } = body
 
-  if (!prompt?.trim()) {
-    return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
-  }
+    if (!prompt?.trim()) {
+      return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
+    }
 
-  const hashInput = `${prompt}|${audience ?? ''}|${tone ?? ''}|${topic ?? ''}|${keywords ?? ''}`
-  const hash = stableHash(hashInput)
-  const structureMode = structureModes[hash % structureModes.length]
-  const fallbackToneMode = toneModes[Math.floor(hash / 7) % toneModes.length]
-  const appliedTone = tone?.trim() || fallbackToneMode
-  const requestedCluster = resolveCluster(topic, undefined, prompt)
+    const hashInput = `${prompt}|${audience ?? ''}|${tone ?? ''}|${topic ?? ''}|${keywords ?? ''}`
+    const hash = stableHash(hashInput)
 
-  const { data: availableTopics } = await adminClient
-    .from('topics')
-    .select('id, name, slug, parent_id')
-    .order('sort_order', { ascending: true })
-    .order('name', { ascending: true })
+    const structureMode = structureModes[hash % structureModes.length]
+    const fallbackToneMode = toneModes[Math.floor(hash / 7) % toneModes.length]
+    const appliedTone = tone?.trim() || fallbackToneMode
 
-  const taxonomy = buildTopicTaxonomy((availableTopics ?? []) as TopicCandidate[])
+    const requestedCluster = resolveCluster(topic, undefined, prompt)
 
-  const { data: existingArticles } = await adminClient
-    .from('articles')
-    .select('title, slug, excerpt, content_cluster, pillar_topic')
-    .eq('status', 'published')
-    .order('published_at', { ascending: false })
-    .limit(8)
+    const { data: availableTopics } = await adminClient
+      .from('topics')
+      .select('id, name, slug, parent_id')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true })
 
-  const linkCandidates = (existingArticles ?? [])
-    .filter((article) => article.title && article.slug)
-    .map((article) => ({
-      title: String(article.title),
-      slug: String(article.slug).replace(/^\/+|\/+$/g, ''),
-      excerpt: article.excerpt ? String(article.excerpt) : null,
-      content_cluster: article.content_cluster ? String(article.content_cluster) : null,
-      pillar_topic: article.pillar_topic ? String(article.pillar_topic) : null,
-    }))
+    const taxonomy = buildTopicTaxonomy((availableTopics ?? []) as TopicCandidate[])
 
-  const systemPrompt = buildSystemPrompt(structureMode)
+    const { data: existingArticles } = await adminClient
+      .from('articles')
+      .select('title, slug, excerpt, content_cluster, pillar_topic')
+      .eq('status', 'published')
+      .order('published_at', { ascending: false })
+      .limit(8)
 
-  const userPrompt = [
-    audience ? `TARGET AUDIENCE: ${audience}` : '',
-    `TONE MODE: ${appliedTone}`,
-    topic ? `OPTIONAL USER CATEGORY GUIDANCE: ${topic}` : '',
-    taxonomy ? `AVAILABLE TAXONOMY (choose the best topic_id from this list):\n${taxonomy}` : '',
-    `RECOMMENDED PILLAR TOPIC: ${requestedCluster.pillar}`,
-    `RECOMMENDED CONTENT CLUSTER: ${requestedCluster.cluster}`,
-    keywords ? `TARGET KEYWORDS: ${keywords}` : '',
-    linkCandidates.length ? `EXISTING ARTICLE CANDIDATES FOR INTERNAL LINKS (use only these slugs if relevant): ${JSON.stringify(linkCandidates)}` : 'EXISTING ARTICLE CANDIDATES FOR INTERNAL LINKS: []',
-    `STRUCTURE MODE: ${structureMode}`,
-    `
+    const linkCandidates = (existingArticles ?? [])
+      .filter((article) => article.title && article.slug)
+      .map((article) => ({
+        title: String(article.title),
+        slug: String(article.slug).replace(/^\/+|\/+$/g, ''),
+        excerpt: article.excerpt ? String(article.excerpt) : null,
+        content_cluster: article.content_cluster ? String(article.content_cluster) : null,
+        pillar_topic: article.pillar_topic ? String(article.pillar_topic) : null,
+      }))
+
+    const systemPrompt = buildSystemPrompt(structureMode)
+
+    const userPrompt = [
+      audience ? `TARGET AUDIENCE: ${audience}` : '',
+      `TONE MODE: ${appliedTone}`,
+      topic ? `OPTIONAL USER CATEGORY GUIDANCE: ${topic}` : '',
+      taxonomy ? `AVAILABLE TAXONOMY (choose the best topic_id from this list):\n${taxonomy}` : '',
+      `RECOMMENDED PILLAR TOPIC: ${requestedCluster.pillar}`,
+      `RECOMMENDED CONTENT CLUSTER: ${requestedCluster.cluster}`,
+      keywords ? `TARGET KEYWORDS: ${keywords}` : '',
+      linkCandidates.length ? `EXISTING ARTICLE CANDIDATES FOR INTERNAL LINKS: ${JSON.stringify(linkCandidates)}` : 'EXISTING ARTICLE CANDIDATES FOR INTERNAL LINKS: []',
+      `STRUCTURE MODE: ${structureMode}`,
+      `
 Return ONLY valid JSON with exactly these keys:
 {
   "title": "string",
-  "article": "string (Markdown article body, 850-1100 words unless requested otherwise; no headings, no bullet lists, natural flow)",
+  "article": "string (Markdown article body, 950-1200 words; no headings, no bullet lists, natural flow)",
   "content": "string (same as article)",
   "excerpt": "string",
   "slug": "string",
@@ -476,32 +438,31 @@ Return ONLY valid JSON with exactly these keys:
   "ai_structure_mode": "string"
 }
 `,
-    'Write the article now. Focus on operational realism, practical detail, and a measured field-informed voice. No summaries, no theatrical grit, no forced internal links.',
-  ]
-    .filter(Boolean)
-    .join('\n')
+      'Write the article now. Focus on operational realism, practical detail, and a measured field-informed voice. No summaries, no theatrical grit, no forced internal links.',
+    ]
+      .filter(Boolean)
+      .join('\n')
 
-  let draft: (GeneratedArticleDraft & {
-    article?: string
-    image_prompt?: string
-    category?: string
-    subcategory?: string
-    includeChecklist?: boolean
-    includeFAQ?: boolean
-    topic_id?: string | null
-    internal_links?: InternalLinkTarget[]
-    internal_link_targets?: InternalLinkTarget[]
-  })
+    let draft: (GeneratedArticleDraft & {
+      article?: string
+      image_prompt?: string
+      category?: string
+      subcategory?: string
+      includeChecklist?: boolean
+      includeFAQ?: boolean
+      topic_id?: string | null
+      internal_links?: InternalLinkTarget[]
+      internal_link_targets?: InternalLinkTarget[]
+    })
 
-  try {
     const completion = await openai.chat.completions.create({
-      model: 'gpt-4.1-mini', // High-performance model with excellent adherence to complex human-writing rules
+      model: 'gpt-4o-mini',           // Changed to more reliable model
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.82, // Enough variation for natural prose without pushing into theatrical rant mode
-      max_tokens: 4200, 
+      temperature: 0.75,
+      max_tokens: 4200,
       response_format: { type: 'json_object' },
     })
 
@@ -510,31 +471,21 @@ Return ONLY valid JSON with exactly these keys:
       return NextResponse.json({ error: 'No content generated' }, { status: 500 })
     }
 
-    try {
-      draft = JSON.parse(rawContent)
-    } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
-    }
+    draft = JSON.parse(rawContent)
 
     draft.content = draft.content || draft.article || ''
     draft.article = draft.article || draft.content
 
-    if (!draft.slug) {
-      draft.slug = generateSlug(draft.title)
-    }
-
-    if (!draft.meta_title) {
-      draft.meta_title = draft.title?.slice(0, 60) ?? ''
-    }
-
+    if (!draft.slug) draft.slug = generateSlug(draft.title)
+    if (!draft.meta_title) draft.meta_title = draft.title?.slice(0, 60) ?? ''
     if (!draft.excerpt && draft.content) {
       draft.excerpt = draft.content.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
     }
-
     if (!draft.meta_description) {
       draft.meta_description = draft.excerpt?.slice(0, 160) ?? ''
     }
 
+    // Topic matching
     const topicCandidates = (availableTopics ?? []) as TopicCandidate[]
     const matchedTopic =
       topicCandidates.find((candidate) => candidate.id === draft.topic_id) ||
@@ -551,55 +502,44 @@ Return ONLY valid JSON with exactly these keys:
     draft.content_cluster = normaliseClusterText(draft.content_cluster || clusterFromDraft.cluster)
     draft.pillar_topic = draft.pillar_topic || clusterFromDraft.pillar
     draft.ai_structure_mode = structureMode
-    const parsedLinks = parseInternalLinks(draft.internal_links || draft.internal_link_targets)
-    draft.internal_links = parsedLinks
-    draft.internal_link_targets = parsedLinks
 
     draft = enforceInternalLinkInjection(draft, linkCandidates, prompt)
 
-    // POST-GENERATION VALIDATION + OPTIONAL BACKEND STYLE REWRITE
-    let validation = validateArticle(draft.content || '', 850)
+    // POST-GENERATION VALIDATION
+    let validation = validateArticle(draft.content || '', 950)
     console.log(generateValidationReport(validation))
 
+    // Optional narrative rewrite if quality is low
     if (shouldRunNarrativeRewrite(validation) && draft.content) {
       try {
         const rewriteCompletion = await openai.chat.completions.create({
-          model: 'gpt-4.1-mini',
+          model: 'gpt-4o-mini',
           messages: [
             { role: 'system', content: buildSystemPrompt('article_only') },
-            { role: 'user', content: buildNarrativeRewritePrompt(draft.content) },
+            { role: 'user', content: buildNarrativeRewritePrompt(draft.article || draft.content) },
           ],
-          temperature: 0.74,
+          temperature: 0.72,
           max_tokens: 3600,
           response_format: { type: 'json_object' },
         })
 
         const rewriteRaw = rewriteCompletion.choices[0]?.message?.content
-
         if (rewriteRaw) {
-          const rewritten = JSON.parse(rewriteRaw) as {
-            article?: string
-            content?: string
-          }
-
+          const rewritten = JSON.parse(rewriteRaw) as { article?: string; content?: string }
           const rewrittenContent = rewritten.content || rewritten.article
-
-          if (rewrittenContent && countWords(rewrittenContent) >= 750) {
+          if (rewrittenContent && countWords(rewrittenContent) >= 800) {
             draft.content = rewrittenContent
             draft.article = rewrittenContent
             draft.excerpt = rewrittenContent.replace(/[#*_`>\n]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)
             draft.meta_description = draft.excerpt.slice(0, 160)
-
-            validation = validateArticle(draft.content || '', 850)
             console.log('[Narrative Rewrite Applied]')
-            console.log(generateValidationReport(validation))
           }
         }
       } catch (rewriteErr) {
         console.warn('Narrative rewrite skipped:', rewriteErr)
       }
     }
-    
+
     if (Array.isArray(draft.keyword_suggestions)) {
       draft.keyword_suggestions = draft.keyword_suggestions
         .map((keyword) => String(keyword).trim())
@@ -608,28 +548,24 @@ Return ONLY valid JSON with exactly these keys:
     } else {
       draft.keyword_suggestions = []
     }
-  } catch (err: unknown) {
-    console.error('OpenAI text generation error:', err)
-    const message = err instanceof Error ? err.message : 'OpenAI API error'
-    return NextResponse.json({ error: message }, { status: 500 })
-  }
 
     return NextResponse.json({ draft }, { status: 200 })
+
   } catch (err: unknown) {
     console.error('/api/generate-article fatal error:', err)
-    return jsonError(getErrorMessage(err), 500, err)
+    return NextResponse.json(
+      { error: getErrorMessage(err) },
+      { status: 500 }
+    )
   }
 }
 
 export async function GET() {
   return NextResponse.json(
     { error: 'Method Not Allowed. Use POST to generate articles.' },
-    { 
+    {
       status: 405,
-      headers: {
-        'Allow': 'POST',
-        'Content-Type': 'application/json',
-      }
+      headers: { 'Allow': 'POST' }
     }
   )
 }
