@@ -18,6 +18,57 @@ const readJsonResponse = async (res: Response) => {
   }
 }
 
+const getQualityStatusClasses = (status?: string) => {
+  switch (status) {
+    case 'publish_ready':
+      return 'border-green-200 bg-green-50 text-green-900'
+    case 'minor_edit':
+      return 'border-amber-200 bg-amber-50 text-amber-900'
+    case 'rewrite_recommended':
+      return 'border-red-200 bg-red-50 text-red-900'
+    default:
+      return 'border-gray-200 bg-gray-50 text-gray-900'
+  }
+}
+
+const getQualityBadgeClasses = (status?: string) => {
+  switch (status) {
+    case 'publish_ready':
+      return 'bg-green-100 text-green-700 border-green-200'
+    case 'minor_edit':
+      return 'bg-amber-100 text-amber-700 border-amber-200'
+    case 'rewrite_recommended':
+      return 'bg-red-100 text-red-700 border-red-200'
+    default:
+      return 'bg-gray-100 text-gray-700 border-gray-200'
+  }
+}
+
+const getQualityBarClasses = (status?: string) => {
+  switch (status) {
+    case 'publish_ready':
+      return 'bg-green-600'
+    case 'minor_edit':
+      return 'bg-amber-500'
+    case 'rewrite_recommended':
+      return 'bg-red-500'
+    default:
+      return 'bg-gray-500'
+  }
+}
+
+const getQualityCheckClasses = (status?: string) => {
+  switch (status) {
+    case 'pass':
+      return 'border-green-200 bg-white text-green-800'
+    case 'fail':
+      return 'border-red-200 bg-white text-red-800'
+    default:
+      return 'border-amber-200 bg-white text-amber-800'
+  }
+}
+
+
 export default function GenerateArticlePage() {
   const router = useRouter()
 
@@ -452,6 +503,71 @@ export default function GenerateArticlePage() {
               {saveError && (
                 <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
                   {saveError}
+                </div>
+              )}
+
+              {draft.quality_score && (
+                <div className={`rounded-xl border p-4 ${getQualityStatusClasses(draft.quality_score.status)}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider opacity-75">Article Quality Score</p>
+                      <div className="mt-1 flex items-center gap-2 flex-wrap">
+                        <p className="text-2xl font-bold leading-none">{draft.quality_score.score}/100</p>
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getQualityBadgeClasses(draft.quality_score.status)}`}>
+                          {draft.quality_score.label}
+                        </span>
+                      </div>
+                    </div>
+                    {draft.quality_score.status === 'publish_ready' ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                    )}
+                  </div>
+
+                  <div className="mt-3 h-2 w-full rounded-full bg-white/70 overflow-hidden border border-white/70">
+                    <div
+                      className={`h-full rounded-full ${getQualityBarClasses(draft.quality_score.status)}`}
+                      style={{ width: `${Math.max(0, Math.min(100, draft.quality_score.score))}%` }}
+                    />
+                  </div>
+
+                  <p className="mt-3 text-sm opacity-90">{draft.quality_score.recommended_action}</p>
+
+                  {draft.quality_score.checks?.length > 0 && (
+                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {draft.quality_score.checks.map((check, index) => (
+                        <div key={`${check.label}-${index}`} className={`rounded-lg border px-3 py-2 ${getQualityCheckClasses(check.status)}`}>
+                          <p className="text-xs font-semibold">{check.label}</p>
+                          <p className="text-xs mt-0.5 opacity-80">{check.detail}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {(draft.quality_score.issues?.length > 0 || draft.quality_score.warnings?.length > 0) && (
+                    <details className="mt-3 text-xs">
+                      <summary className="cursor-pointer font-medium">Show validation details</summary>
+                      <div className="mt-2 space-y-2">
+                        {draft.quality_score.issues?.length > 0 && (
+                          <div>
+                            <p className="font-semibold">Issues</p>
+                            <ul className="list-disc pl-5 space-y-1">
+                              {draft.quality_score.issues.map((issue, index) => <li key={`issue-${index}`}>{issue}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        {draft.quality_score.warnings?.length > 0 && (
+                          <div>
+                            <p className="font-semibold">Warnings</p>
+                            <ul className="list-disc pl-5 space-y-1">
+                              {draft.quality_score.warnings.map((warning, index) => <li key={`warning-${index}`}>{warning}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
 

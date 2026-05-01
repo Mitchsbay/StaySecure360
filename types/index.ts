@@ -106,6 +106,24 @@ export interface InternalLinkTarget {
   reason?: string
 }
 
+export interface ArticleQualityCheck {
+  label: string
+  status: 'pass' | 'warning' | 'fail'
+  detail: string
+}
+
+export interface ArticleQualityScore {
+  score: number
+  status: 'publish_ready' | 'minor_edit' | 'rewrite_recommended'
+  label: string
+  word_count: number
+  issues: string[]
+  warnings: string[]
+  banned_phrases: string[]
+  recommended_action: string
+  checks: ArticleQualityCheck[]
+}
+
 export interface GeneratedArticleDraft {
   title: string
   slug: string
@@ -130,5 +148,6 @@ export interface GeneratedArticleDraft {
   internal_links?: InternalLinkTarget[]
   internal_link_targets?: InternalLinkTarget[]
   ai_structure_mode?: string
+  quality_score?: ArticleQualityScore
 }
 

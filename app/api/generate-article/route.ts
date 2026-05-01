@@ -599,6 +599,86 @@ const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle
     /report-like|checklist|step-by-step|category-by-category|repeated category|repetitive field phrasing|formal audit|too many issue areas|scope drift|forced internal link|internal-link overuse|duplicate placement|markdown heading|bullet list|numbered list/i.test(warning)
   )
 
+const buildAdminQualityScore = (
+  validation: ReturnType<typeof validateArticle>,
+  content: string
+) => {
+  const structureWarnings = validation.warnings.filter((warning) =>
+    /report-like|scope drift|checklist|repetitive field|formal audit|heading|bullet|numbered/i.test(warning)
+  )
+  const linkWarnings = validation.warnings.filter((warning) => /internal.?link|duplicate placement/i.test(warning))
+  const endingWarnings = validation.warnings.filter((warning) => /ending|conclusion/i.test(warning))
+  const score = validation.score
+  const status =
+    score >= 90 && validation.issues.length === 0 && structureWarnings.length === 0
+      ? 'publish_ready'
+      : score >= 75 && validation.issues.length <= 1
+        ? 'minor_edit'
+        : 'rewrite_recommended'
+
+  const label =
+    status === 'publish_ready'
+      ? 'Publish-ready'
+      : status === 'minor_edit'
+        ? 'Minor edit recommended'
+        : 'Rewrite recommended'
+
+  const recommended_action =
+    status === 'publish_ready'
+      ? 'Good to review manually and save as draft.'
+      : status === 'minor_edit'
+        ? 'Review the warnings and make a light manual edit before publishing.'
+        : 'Run another rewrite or manually narrow the article before publishing.'
+
+  const naturalLinkCount = (content.match(/\[[^\]]+\]\((?:\/articles\/|https?:\/\/[^)]*staysecure360\.com\/)[^)]+\)/gi) || []).length
+
+  return {
+    score,
+    status,
+    label,
+    word_count: validation.wordCount,
+    issues: validation.issues,
+    warnings: validation.warnings,
+    banned_phrases: validation.bannedPhrases,
+    recommended_action,
+    checks: [
+      {
+        label: 'Word count',
+        status: validation.wordCount >= 800 && validation.wordCount <= 1100 ? 'pass' : 'warning',
+        detail: `${validation.wordCount} words. Target is 800-1000 words, with some flexibility for depth.`,
+      },
+      {
+        label: 'AI / fake-grit phrases',
+        status: validation.bannedPhrases.length === 0 ? 'pass' : 'warning',
+        detail: validation.bannedPhrases.length === 0
+          ? 'No banned AI-style or fake-grit phrases found.'
+          : `${validation.bannedPhrases.length} phrase(s): ${validation.bannedPhrases.slice(0, 5).join(', ')}`,
+      },
+      {
+        label: 'Human article structure',
+        status: structureWarnings.length === 0 ? 'pass' : 'warning',
+        detail: structureWarnings.length === 0
+          ? 'No obvious report, checklist, or over-broad structure detected.'
+          : structureWarnings[0],
+      },
+      {
+        label: 'Internal links',
+        status: linkWarnings.length === 0 ? 'pass' : 'warning',
+        detail: linkWarnings.length === 0
+          ? `${naturalLinkCount} natural body link(s). Keep body links to 1-2 where possible.`
+          : linkWarnings[0],
+      },
+      {
+        label: 'Ending',
+        status: endingWarnings.length === 0 ? 'pass' : 'warning',
+        detail: endingWarnings.length === 0
+          ? 'No polished conclusion or checklist-style ending detected.'
+          : endingWarnings[0],
+      },
+    ],
+  }
+}
+
 const buildNarrativeRewritePrompt = (article: string) => `Rewrite the article below so it no longer reads like a report, checklist, SEO article, or category-by-category security guide.
 
 Keep operational accuracy, but do NOT preserve every point. The main job is to narrow the article until it has one route and no syllabus feel, then translate it out of formal audit-report language. Do not make it grumpy, theatrical, salesy, motivational, or polished. The voice should be calm, experienced, specific, practical, and plainspoken.
@@ -924,6 +1004,13 @@ Return ONLY valid JSON with exactly these keys:
         console.log('[Natural Internal Links Applied]')
       }
     }
+
+    if (draft.content) {
+      validation = validateArticle(draft.content || '', 800)
+      draft.quality_score = buildAdminQualityScore(validation, draft.content || '')
+      console.log('[Admin Quality Score]', draft.quality_score)
+    }
+
 
     if (Array.isArray(draft.keyword_suggestions)) {
       draft.keyword_suggestions = draft.keyword_suggestions
