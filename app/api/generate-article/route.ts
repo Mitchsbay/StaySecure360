@@ -15,7 +15,7 @@ import OpenAI from 'openai'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { generateSlug } from '@/lib/utils'
 import { validateArticle, generateValidationReport, countWords } from '@/lib/article-validation'
-import type { GenerateArticleRequest, GeneratedArticleDraft, InternalLinkTarget } from '@/types'
+import type { GenerateArticleRequest, GeneratedArticleDraft, InternalLinkTarget, ArticleQualityScore } from '@/types'
 
 type StructureMode =
   | 'article_only'
@@ -602,14 +602,14 @@ const shouldRunNarrativeRewrite = (validation: ReturnType<typeof validateArticle
 const buildAdminQualityScore = (
   validation: ReturnType<typeof validateArticle>,
   content: string
-) => {
+): ArticleQualityScore => {
   const structureWarnings = validation.warnings.filter((warning) =>
     /report-like|scope drift|checklist|repetitive field|formal audit|heading|bullet|numbered/i.test(warning)
   )
   const linkWarnings = validation.warnings.filter((warning) => /internal.?link|duplicate placement/i.test(warning))
   const endingWarnings = validation.warnings.filter((warning) => /ending|conclusion/i.test(warning))
   const score = validation.score
-  const status =
+  const status: ArticleQualityScore['status'] =
     score >= 90 && validation.issues.length === 0 && structureWarnings.length === 0
       ? 'publish_ready'
       : score >= 75 && validation.issues.length <= 1
