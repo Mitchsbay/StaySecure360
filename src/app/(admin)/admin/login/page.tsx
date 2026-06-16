@@ -1,16 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
 import Link from 'next/link';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 
 export default function AdminLoginPage() {
+  const supabase = createSupabaseBrowserClient();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +17,6 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      // Sign in with email and password
       const { data, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -30,37 +28,38 @@ export default function AdminLoginPage() {
         return;
       }
 
-      if (!data.user) {
+      if (!data.user || !data.session?.access_token) {
         setError('Login failed. Please try again.');
         setLoading(false);
         return;
       }
 
-      // Check if user has admin or editor role in profiles table
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single();
+      const response = await fetch('/api/admin/verify-role', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${data.session.access_token}`,
+        },
+      });
 
-      if (profileError) {
-        setError('Could not verify user role.');
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        setError(result.error || 'Could not verify user role.');
         setLoading(false);
         return;
       }
 
-      if (!profile || (profile.role !== 'admin' && profile.role !== 'editor')) {
-        // Sign out if user doesn't have proper role
+      if (!['admin', 'editor'].includes(result.role)) {
         await supabase.auth.signOut();
         setError('You do not have permission to access the admin panel.');
         setLoading(false);
         return;
       }
 
-      // Redirect to admin dashboard on success
-      router.push('/admin');
+      // Full page navigation ensures the server and middleware can read the fresh SSR cookies.
+      window.location.href = '/admin';
     } catch (err) {
-      setError('An unexpected error occurred. Please try again.');
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.');
       setLoading(false);
     }
   };
@@ -68,7 +67,6 @@ export default function AdminLoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-dark-950 px-4">
       <div className="w-full max-w-md">
-        {/* Logo and Title */}
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold">
             <span className="text-white">SS360</span>
@@ -77,10 +75,8 @@ export default function AdminLoginPage() {
           <p className="text-dark-400 mt-2">Stay Secure 360 Administration</p>
         </div>
 
-        {/* Login Card */}
         <div className="bg-dark-900 rounded-lg border border-dark-800 p-8">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email Field */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-white mb-2">
                 Email
@@ -96,7 +92,6 @@ export default function AdminLoginPage() {
               />
             </div>
 
-            {/* Password Field */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-white mb-2">
                 Password
@@ -112,14 +107,12 @@ export default function AdminLoginPage() {
               />
             </div>
 
-            {/* Error Message */}
             {error && (
               <div className="p-3 rounded-lg bg-error-500/10 border border-error-500/30 text-error-500 text-sm">
                 {error}
               </div>
             )}
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
@@ -130,7 +123,6 @@ export default function AdminLoginPage() {
           </form>
         </div>
 
-        {/* Footer */}
         <div className="text-center mt-6 text-dark-400 text-sm">
           <p>
             <Link href="/" className="text-primary-500 hover:text-primary-400">
