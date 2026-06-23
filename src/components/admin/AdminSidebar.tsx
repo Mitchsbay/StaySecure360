@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
-import { useRouter } from 'next/navigation';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { useMemo, useState } from 'react';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1' },
@@ -18,11 +18,23 @@ const navItems = [
 
 export default function AdminSidebar() {
   const pathname = usePathname();
-  const router = useRouter();
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const [signingOut, setSigningOut] = useState(false);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    router.push('/admin/login');
+    setSigningOut(true);
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      console.error('Sign out failed:', error);
+      alert('Sign out failed: ' + error.message);
+      setSigningOut(false);
+      return;
+    }
+
+    // Use a full-page navigation so middleware reads the cleared auth cookies.
+    window.location.replace('/admin/login');
   };
 
   return (
@@ -58,12 +70,13 @@ export default function AdminSidebar() {
       <div className="p-4 border-t border-dark-800">
         <button
           onClick={handleSignOut}
+          disabled={signingOut}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-dark-400 hover:text-white hover:bg-dark-800 transition-colors"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
           </svg>
-          Sign Out
+          {signingOut ? 'Signing out...' : 'Sign Out'}
         </button>
       </div>
     </aside>

@@ -1,7 +1,7 @@
 'use client';
 
-import { supabase } from '@/lib/supabase-client';
-import { useState, useRef } from 'react';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { useMemo, useState, useRef } from 'react';
 
 interface ImageUploadProps {
   bucket: string;
@@ -14,6 +14,7 @@ interface ImageUploadProps {
 }
 
 export function ImageUpload({ bucket, value, onChange, altValue, onAltChange, label, accept = 'image/*' }: ImageUploadProps) {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -97,6 +98,7 @@ interface FileUploadProps {
 }
 
 export function FileUpload({ bucket, value, onChange, label, accept = '.pdf,.zip' }: FileUploadProps) {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
