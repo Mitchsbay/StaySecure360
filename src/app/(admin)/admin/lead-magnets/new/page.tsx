@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { FileUpload } from '@/components/admin/ImageUpload';
 import AdminLayout from '@/components/admin/AdminLayout';
 
@@ -17,6 +17,7 @@ interface LandingPage {
 }
 
 export default function NewLeadMagnetPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');

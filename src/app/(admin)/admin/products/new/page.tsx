@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { ImageUpload, FileUpload } from '@/components/admin/ImageUpload';
 import { RepeatableText, RepeatableFAQ } from '@/components/admin/RepeatableField';
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -13,6 +13,7 @@ interface Category {
 }
 
 export default function NewProductPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [categoryId, setCategoryId] = useState('');

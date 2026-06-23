@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { RepeatableText, RepeatableFAQ, RepeatableSections } from '@/components/admin/RepeatableField';
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -43,6 +43,7 @@ interface Category {
 }
 
 export default function EditLandingPagePage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const params = useParams();
   const id = params.id as string;
 

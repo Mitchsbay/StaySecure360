@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase-client';
+import { useState, useEffect, useMemo } from 'react';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import AdminLayout from '@/components/admin/AdminLayout';
 
@@ -17,6 +17,7 @@ interface SiteSettings {
 }
 
 export default function SettingsPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [settings, setSettings] = useState<SiteSettings | null>(null);
   const [brandName, setBrandName] = useState('Stay Secure 360');
   const [siteUrl, setSiteUrl] = useState('');

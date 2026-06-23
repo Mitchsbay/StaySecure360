@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import AdminLayout from '@/components/admin/AdminLayout';
 
 export default function NewCategoryPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');

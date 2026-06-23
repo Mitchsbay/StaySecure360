@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import Link from 'next/link';
 import AdminLayout from '@/components/admin/AdminLayout';
 
@@ -37,6 +37,7 @@ interface Product {
 }
 
 export default function LandingPagesPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [landingPages, setLandingPages] = useState<LandingPage[]>([]);
   const [products, setProducts] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(true);

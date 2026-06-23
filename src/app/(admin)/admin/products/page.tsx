@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import Link from 'next/link';
 import AdminLayout from '@/components/admin/AdminLayout';
 
@@ -21,6 +21,7 @@ interface Category {
 }
 
 export default function ProductsPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);

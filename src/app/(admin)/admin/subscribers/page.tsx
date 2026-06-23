@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase-client';
+import { useState, useEffect, useMemo } from 'react';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import AdminLayout from '@/components/admin/AdminLayout';
 
 interface Subscriber {
@@ -16,6 +16,7 @@ interface Subscriber {
 }
 
 export default function SubscribersPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [subscribers, setSubscribers] = useState<Subscriber[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);

@@ -1,7 +1,9 @@
 import AdminLayout from '@/components/admin/AdminLayout';
-import { supabase } from '@/lib/supabase-client';
+import { createSupabaseServerClient } from '@/lib/supabase-server';
 
 async function getStats() {
+  const supabase = await createSupabaseServerClient();
+
   const [categories, products, landingPages, articles, leadMagnets, subscribers] = await Promise.all([
     supabase.from('categories').select('id', { count: 'exact', head: true }),
     supabase.from('products').select('id', { count: 'exact', head: true }),

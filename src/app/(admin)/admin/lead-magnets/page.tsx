@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import Link from 'next/link';
 import AdminLayout from '@/components/admin/AdminLayout';
 
@@ -15,6 +15,7 @@ interface LeadMagnet {
 }
 
 export default function LeadMagnetsPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [leadMagnets, setLeadMagnets] = useState<LeadMagnet[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);

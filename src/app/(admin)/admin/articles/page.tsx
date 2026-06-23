@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase-client';
+import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
 import Link from 'next/link';
 import AdminLayout from '@/components/admin/AdminLayout';
 
@@ -54,6 +54,7 @@ const TEMPLATES: TemplateType[] = [
 ];
 
 export default function ArticlesPage() {
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [articles, setArticles] = useState<Article[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
