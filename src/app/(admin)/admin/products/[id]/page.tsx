@@ -522,7 +522,7 @@ export default function EditProductPage() {
                 {/* Cover Image */}
                 <div>
                   <ImageUpload
-                    bucket="products"
+                    bucket="product-covers"
                     value={coverImageUrl}
                     onChange={setCoverImageUrl}
                     altValue={coverImageAlt}
@@ -534,7 +534,7 @@ export default function EditProductPage() {
                 {/* Preview Image */}
                 <div>
                   <ImageUpload
-                    bucket="products"
+                    bucket="product-previews"
                     value={previewImageUrl}
                     onChange={setPreviewImageUrl}
                     altValue={previewImageAlt}
@@ -546,7 +546,7 @@ export default function EditProductPage() {
                 {/* Product File */}
                 <div>
                   <FileUpload
-                    bucket="products"
+                    bucket="product-files"
                     value={productFilePath}
                     onChange={setProductFilePath}
                     label="Product File (PDF, ZIP, etc.)"

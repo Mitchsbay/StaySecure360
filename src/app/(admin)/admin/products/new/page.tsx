@@ -360,7 +360,7 @@ export default function NewProductPage() {
                 {/* Cover Image */}
                 <div>
                   <ImageUpload
-                    bucket="products"
+                    bucket="product-covers"
                     value={coverImageUrl}
                     onChange={setCoverImageUrl}
                     altValue={coverImageAlt}
@@ -372,7 +372,7 @@ export default function NewProductPage() {
                 {/* Preview Image */}
                 <div>
                   <ImageUpload
-                    bucket="products"
+                    bucket="product-previews"
                     value={previewImageUrl}
                     onChange={setPreviewImageUrl}
                     altValue={previewImageAlt}
@@ -384,7 +384,7 @@ export default function NewProductPage() {
                 {/* Product File */}
                 <div>
                   <FileUpload
-                    bucket="products"
+                    bucket="product-files"
                     value={productFilePath}
                     onChange={setProductFilePath}
                     label="Product File (PDF, ZIP, etc.)"

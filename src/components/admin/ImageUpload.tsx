@@ -97,7 +97,7 @@ interface FileUploadProps {
   accept?: string;
 }
 
-export function FileUpload({ bucket, value, onChange, label, accept = '.pdf,.zip' }: FileUploadProps) {
+export function FileUpload({ bucket, value, onChange, label, accept = '.pdf,.epub,.zip,.doc,.docx' }: FileUploadProps) {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
