@@ -1,6 +1,28 @@
+'use client';
+
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 export default function PublicFooter() {
+  const pathname = usePathname();
+  const isLandingPage = pathname?.startsWith('/landing');
+
+  if (isLandingPage) {
+    return (
+      <footer className="border-t border-dark-800 bg-dark-950">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-center sm:flex-row sm:px-6 sm:text-left lg:px-8">
+          <p className="text-xs text-dark-500">
+            &copy; {new Date().getFullYear()} Stay Secure 360. All rights reserved.
+          </p>
+          <div className="flex items-center gap-4 text-xs">
+            <Link href="/privacy" className="text-dark-500 hover:text-primary-400">Privacy</Link>
+            <Link href="/terms" className="text-dark-500 hover:text-primary-400">Terms</Link>
+          </div>
+        </div>
+      </footer>
+    );
+  }
+
   return (
     <footer className="bg-dark-950 border-t border-dark-800 mt-auto">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">

@@ -79,6 +79,16 @@ export default function ProductsPage() {
     return category?.name || 'Unknown';
   };
 
+  const cleanProductTitle = (title: string) => {
+    return title.replace(/^Product:\s*/i, '').trim();
+  };
+
+  const formatProductPrice = (price: number | string | null) => {
+    if (price === null || price === undefined || price === '') return null;
+    const numericPrice = Number(price);
+    return Number.isNaN(numericPrice) ? null : numericPrice.toFixed(2);
+  };
+
   const handleDelete = async () => {
     if (!deleteId) return;
 
@@ -124,7 +134,9 @@ export default function ProductsPage() {
         return;
       }
 
-      const landingPageSlug = `${productData.slug}-landing`;
+      const cleanTitle = cleanProductTitle(productData.title);
+      const productPrice = formatProductPrice(productData.price);
+      const landingPageSlug = productData.slug;
 
       const { error: insertError } = await supabase
         .from('landing_pages')
@@ -132,16 +144,17 @@ export default function ProductsPage() {
           {
             product_id: productId,
             category_id: productData.category_id,
-            title: productData.title,
+            title: cleanTitle,
             slug: landingPageSlug,
             template_type: 'product',
-            hero_title: productData.title,
+            hero_title: cleanTitle,
             hero_subtitle: productData.description,
             hero_image_url: productData.cover_image_url,
             hero_image_alt: productData.cover_image_alt,
+            intro: productData.description,
             benefits: productData.benefits || [],
             faqs: productData.faqs || [],
-            cta_label: 'View Product',
+            cta_label: productPrice ? `Get the Ebook for $${productPrice}` : 'Get the Ebook',
             cta_url: `/products/${productData.slug}`,
             status: 'draft',
           },
